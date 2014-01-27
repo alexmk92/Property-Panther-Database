@@ -67,7 +67,7 @@ CREATE TABLE rooms
 	room_price			NUMBER(*, 2) DEFAULT '0.00'
 						CONSTRAINT rooms_room_price_chk
 							CHECK(REGEXP_LIKE(room_price,
-								'[0-9]+\.[0-9]{2}'))
+								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'))
 						CONSTRAINT rooms_room_price_nn
 							NOT NULL,
 	room_details		VARCHAR2(1000)
@@ -107,9 +107,9 @@ CREATE TABLE properties
 	prop_details		VARCHAR2(1000)
 						CONSTRAINT properties_prop_details_nn
 							NOT NULL,
-	prop_rooms			NUMBER(11)
-						CONSTRAINT properties_prop_rooms_fk
-							REFERENCES rooms(room_id),
+	num_rooms			NUMBER(11)
+						CONSTRAINT properties_num_rooms_nn
+							NOT NULL,
 	prop_cover_img		NUMBER(11)
 						CONSTRAINT properties_prop_cover_fk
 							REFERENCES gallery(property_id)
@@ -199,9 +199,11 @@ CREATE TABLE users
 						CONSTRAINT users_user_pass_chk
 							CHECK(REGEXP_LIKE(user_pass,
 								/* Check for a password 6-40 chars with any char or symbol */
-								'([^\.].{1,255})'))
+								'([^\.].{6,64})'))
 						CONSTRAINT users_user_pass_nn
 							NOT NULL,
+	pass_changed		NUMBER(1) DEFAULT 0
+						CONSTRAINT users_pass_changed
 	user_addr			NUMBER(11)
 						CONSTRAINT users_user_addr_fk
 							REFERENCES addresses(addr_id)
