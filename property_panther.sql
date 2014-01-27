@@ -89,6 +89,11 @@ BEFORE INSERT OR UPDATE ON rooms FOR EACH ROW
 			INTO :NEW.room_id
 			FROM sys.dual;
 		END IF;
+		IF :NEW.tracking_id IS NULL THEN
+		SELECT DBMS_RANDOM.STRING ('X', 16)
+		INTO :NEW.tracking_id
+		FROM sys.dual;
+		END IF;
 	END IF;
 END;
 
@@ -129,6 +134,11 @@ BEFORE INSERT OR UPDATE ON properties FOR EACH ROW
 			SELECT seq_property_id.nextval
 			INTO :NEW.property_id
 			FROM sys.dual;
+		END IF;
+		IF :NEW.tracking_id IS NULL THEN
+		SELECT DBMS_RANDOM.STRING ('X', 16)
+		INTO :NEW.tracking_id
+		FROM sys.dual;
 		END IF;
 	END IF;
 END;
@@ -313,15 +323,7 @@ BEFORE INSERT OR UPDATE ON cities FOR EACH ROW
 	END IF;
 END;
 
-/*******************************************
-*          PROPERTY TRACKING TABLE         *
-********************************************/
 
-
-
-/*******************************************
-*           ADDRESS TRACKING TABLE         *
-********************************************/
 
 
 
