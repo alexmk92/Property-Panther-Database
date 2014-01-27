@@ -59,6 +59,9 @@ CREATE TABLE rooms
 							PRIMARY KEY
 						CONSTRAINT rooms_room_id_nn
 							NOT NULL,
+	tracking_id			VARCHAR2(30) 
+						CONSTRAINT rooms_tracking_id_nn
+							NOT NULL,
 	property_id     	NUMBER(11)
 						CONSTRAINT rooms_property_id_fk
 							REFERENCES properties(property_id)
@@ -99,6 +102,7 @@ CREATE TABLE properties
 							PRIMARY KEY
 						CONSTRAINT properties_prop_id_nn
 							NOT NULL,
+	tracking_id  		VARCHAR2(32),
 	prop_addr			NUMBER(11)
 						CONSTRAINT properties_prop_addr_fk
 							REFERENCES addresses(addr_id)
@@ -308,6 +312,17 @@ BEFORE INSERT OR UPDATE ON cities FOR EACH ROW
 		END IF;
 	END IF;
 END;
+
+/*******************************************
+*          PROPERTY TRACKING TABLE         *
+********************************************/
+
+
+
+/*******************************************
+*           ADDRESS TRACKING TABLE         *
+********************************************/
+
 
 
 
