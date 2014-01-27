@@ -1,8 +1,8 @@
 /*******************************************
-*  	     Property Panther Database Code	   *
-*	     Author:  PRCSE		    		   *
-*        Date Created: 24/01/2014		   *
-*        Version: 1.0 					   *
+*  	     Property Panther Database Code	   
+*	     Author:  PRCSE		    		   
+*        Date Created: 24/01/2014		   
+*        Version: 1.0 					   
 ********************************************/
 
 
