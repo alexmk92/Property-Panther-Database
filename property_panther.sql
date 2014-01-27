@@ -192,14 +192,14 @@ CREATE TABLE users
 	user_email			VARCHAR2(150)
 						CONSTRAINT users_user_email_chk
 							CHECK(REGEXP_LIKE(user_email,
-								'[A-Za-z0-9_\-.+-]+@[A-Za-z0-9].+'))
+								'[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}'))
 						CONSTRAINT users_user_email_nn
 							NOT NULL,   
 	user_pass			VARCHAR2(150)
 						CONSTRAINT users_user_pass_chk
 							CHECK(REGEXP_LIKE(user_pass,
 								/* Check for a password 6-40 chars with any char or symbol */
-								'((?=.*\d)(?=.*[a-z])(?=.*[A-Z])(?=.*[@#$%]).{6,40})'))
+								'([^\.].{1,255})'))
 						CONSTRAINT users_user_pass_nn
 							NOT NULL,
 	user_addr			NUMBER(11)
@@ -208,7 +208,7 @@ CREATE TABLE users
 	user_permissions 	NUMBER(11) DEFAULT '0'
 						CONSTRAINT users_user_permission_nn
 							NOT NULL,
-	user_property			NUMBER(11)
+	user_property		NUMBER(11) DEFAULT NULL
 						CONSTRAINT users_user_house_fk
 							REFERENCES properties(property_id)
 )
