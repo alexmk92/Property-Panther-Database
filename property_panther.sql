@@ -37,6 +37,18 @@ CREATE TABLE gallery
 
 CREATE SEQUENCE seq_img_id START WITH 1 INCREMENT BY 1;
 
+CREATE OR REPLACE TRIGGER trg_gallery
+BEFORE INSERT OR UPDATE ON gallery FOR EACH ROW
+	BEGIN 
+	IF INSERTING THEN
+		IF :NEW.img_id IS NULL THEN
+			SELECT seq_img_id.nextval
+			INTO :NEW.img_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+END;
+
 /*******************************************
 *               ROOMS TABLE                *
 ********************************************/
@@ -65,6 +77,18 @@ CREATE TABLE rooms
 
 CREATE SEQUENCE seq_room_id START WITH 1 INCREMENT BY 1;
 
+CREATE OR REPLACE TRIGGER trg_rooms
+BEFORE INSERT OR UPDATE ON rooms FOR EACH ROW
+	BEGIN 
+	IF INSERTING THEN
+		IF :NEW.room_id IS NULL THEN
+			SELECT seq_room_id.nextval
+			INTO :NEW.room_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+END;
+
 /*******************************************
 *             PROPERTIES TABLE             *
 ********************************************/
@@ -83,7 +107,8 @@ CREATE TABLE properties
 	prop_details		VARCHAR2(1000)
 						CONSTRAINT properties_prop_details_nn
 							NOT NULL,
-	prop_rooms			CONSTRAINT properties_prop_rooms_fk
+	prop_rooms			NUMBER(11)
+						CONSTRAINT properties_prop_rooms_fk
 							REFERENCES rooms(room_id),
 	prop_cover_img		NUMBER(11)
 						CONSTRAINT properties_prop_cover_fk
@@ -91,6 +116,18 @@ CREATE TABLE properties
 );
 
 CREATE SEQUENCE seq_property_id START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER trg_properties
+BEFORE INSERT OR UPDATE ON properties FOR EACH ROW
+	BEGIN 
+	IF INSERTING THEN
+		IF :NEW.property_id IS NULL THEN
+			SELECT seq_property_id.nextval
+			INTO :NEW.property_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+END;
 
 /*******************************************
 *              PAYMENTS TABLE              *
@@ -130,6 +167,18 @@ CREATE TABLE payments
 
 CREATE SEQUENCE seq_payment_id START WITH 1 INCREMENT BY 1;
 
+CREATE OR REPLACE TRIGGER trg_payments
+BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
+	BEGIN 
+	IF INSERTING THEN
+		IF :NEW.payment_id IS NULL THEN
+			SELECT seq_payment_id.nextval
+			INTO :NEW.payment_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+END;
+
 /*******************************************
 *                USERS TABLE               *
 ********************************************/
@@ -165,6 +214,18 @@ CREATE TABLE users
 )
 
 CREATE SEQUENCE seq_user_id START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER trg_users
+BEFORE INSERT OR UPDATE ON users FOR EACH ROW
+	BEGIN 
+	IF INSERTING THEN
+		IF :NEW.user_id IS NULL THEN
+			SELECT seq_user_id.nextval
+			INTO :NEW.user_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+END;
 
 /*******************************************
 *              ADDRESSES TABLE             *
@@ -202,6 +263,18 @@ CREATE TABLE addresses
 
 CREATE SEQUENCE seq_addr_id START WITH 1 INCREMENT BY 1;
 
+CREATE OR REPLACE TRIGGER trg_addresses
+BEFORE INSERT OR UPDATE ON addresses FOR EACH ROW
+	BEGIN 
+	IF INSERTING THEN
+		IF :NEW.addr_id IS NULL THEN
+			SELECT seq_addr_id.nextval
+			INTO :NEW.addr_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+END;
+
 /*******************************************
 *                CITIES TABLE              *
 ********************************************/
@@ -222,6 +295,17 @@ CREATE TABLE cities
 
 CREATE SEQUENCE seq_city_id START WITH 1 INCREMENT BY 1
 
+CREATE OR REPLACE TRIGGER trg_cities
+BEFORE INSERT OR UPDATE ON cities FOR EACH ROW
+	BEGIN 
+	IF INSERTING THEN
+		IF :NEW.city_id IS NULL THEN
+			SELECT seq_city_id.nextval
+			INTO :NEW.city_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+END;
 
 
 
