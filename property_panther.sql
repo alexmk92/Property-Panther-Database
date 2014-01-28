@@ -323,8 +323,51 @@ BEFORE INSERT OR UPDATE ON cities FOR EACH ROW
 	END IF;
 END;
 
+/*******************************************
+*          PAYMENT TRACKING TABLE          *
+********************************************/
+CREATE TABLE track_payments 
+(
+	payment_id 			NUMBER(11)
+						CONSTRAINT track_payment_id_nn
+							NOT NULL,
+	student_id			NUMBER(11)
+						CONSTRAINT track_student_id_nn
+							NOT NULL,
+	payment_amount		NUMBER(11)
+						CONSTRAINT track_payment_amount_chk
+							CHECK(REGEXP_LIKE(payment_amount,
+								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'
+							))
+						CONSTRAINT track_payment_amount_nn
+							NOT NULL,
+	payment_status 		VARCHAR2(30) 
+						CONSTRAINT track_payment_status_chk
+							CHECK( UPPER(payment_status) = 'PENDING' OR 
+								   UPPER(payment_status) = 'OVERDUE' OR 
+								   UPPER(payment_status) = 'PAID'
+								 )
+						CONSTRAINT track_payment_status_nn
+							NOT NULL,
+	payment_due 		TIMESTAMP
+						CONSTRAINT track_payment_due_nn
+							NOT NULL,
+	payment_received	TIMESTAMP
+						CONSTRAINT track_payment_received_nn
+							NOT NULL
+)
 
+/*******************************************
+*        MAINTENANCE REQUEST TABLE         *
+********************************************/
+CREATE TABLE maintenance_request
+(
 
+)
+
+/*******************************************
+*     			  FUNCTIONS  			   *
+********************************************/
 
 
 
