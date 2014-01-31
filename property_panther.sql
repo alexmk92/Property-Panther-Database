@@ -70,7 +70,7 @@ CREATE TABLE rooms
 	room_price			NUMBER(*, 2) DEFAULT '0.00'
 						CONSTRAINT rooms_room_price_chk
 							CHECK(REGEXP_LIKE(room_price,
-								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'))
+								'([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'))
 						CONSTRAINT rooms_room_price_nn
 							NOT NULL,
 	room_details		VARCHAR2(1000)
@@ -119,7 +119,13 @@ CREATE TABLE properties
 	num_rooms			NUMBER(11)
 						CONSTRAINT properties_num_rooms_nn
 							NOT NULL,
-	prop_cover_img		NUMBER(11)
+	prop_price			NUMBER(*, 2) DEFAULT '0.00'
+						CONSTRAINT properties_prop_price_chk
+							CHECK(REGEXP_LIKE(prop_price,
+								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'))
+						CONSTRAINT properties_prop_price_nn
+							NOT NULL,
+	prop_cover_img		NUMBER(11) 
 						CONSTRAINT properties_prop_cover_fk
 							REFERENCES gallery(property_id)
 );
@@ -194,6 +200,43 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 END;
 
 /*******************************************
+*				 TITLES TABLE 		       *
+********************************************/
+CREATE TABLE titles
+(title_id 	NUMBER (11)
+	CONSTRAINT title_title_id_pk
+ 		PRIMARY KEY
+	CONSTRAINT title_title_id_nn
+		NOT NULL,
+ title_name	VARCHAR2 (8)
+	CONSTRAINT title_title_name_nn NOT NULL,
+	CONSTRAINT title_title_name_chk_init
+  		CHECK (title_name = INITCAP(title_name))
+);
+
+INSERT INTO titles(title_name) VALUES('Miss');
+INSERT INTO titles(title_name) VALUES('Mrs');
+INSERT INTO titles(title_name) VALUES('Ms');
+INSERT INTO titles(title_name) VALUES('Sir');
+INSERT INTO titles(title_name) VALUES('Mr');
+
+CREATE SEQUENCE seq_title_id START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER trg_titles
+    BEFORE INSERT OR UPDATE OR DELETE ON titles FOR EACH ROW
+    BEGIN
+    IF INSERTING THEN
+        IF :NEW.title_id IS NULL THEN
+            SELECT seq_title_id.nextval
+            INTO :NEW.title_id
+            FROM sys.dual;
+        END IF;
+    END IF;
+   
+    :NEW.title_name := INITCAP(:NEW.title_name);
+END;
+
+/*******************************************
 *                USERS TABLE               *
 ********************************************/
 CREATE TABLE users
@@ -220,13 +263,36 @@ CREATE TABLE users
 						CONSTRAINT users_pass_changed
 	user_addr			NUMBER(11)
 						CONSTRAINT users_user_addr_fk
-							REFERENCES addresses(addr_id)
+							REFERENCES addresses(addr_id),
+	user_title			NUMBER(11) 
+						CONSTRAINT users_user_title_fk
+							REFERENCES titles(title_id)
+						CONSTRAINT users_user_title_nn
+							NOT NULL,
+	user_forename		VARCHAR2(50) DEFAULT 'NULL'
+						CONSTRAINT users_user_forename_chk
+							CHECK(REGEXP_LIKE(user_forename,
+								'[A-Za-z-]{1,50}')),
+	user_surname		VARCHAR2(50) DEFAULT 'NULL'
+						CONSTRAINT users_user_surname_chk
+							CHECK(REGEXP_LIKE(user_surname,
+								'[A-Za-z-]{1,50}')),
+	user_phone			VARCHAR2(14) 
+						CONSTRAINT users_user_phone_chk
+							CHECK(REGEXP_LIKE(user_phone,
+								'[0-9]{5}\s?[0-9]{6}')),
 	user_permissions 	NUMBER(11) DEFAULT '0'
+						CONSTRAINT users_user_permission_chk
+							CHECK(REGEXP_LIKE(user_permissions,
+								'[0-5]{1}'))
 						CONSTRAINT users_user_permission_nn
 							NOT NULL,
 	user_property		NUMBER(11) DEFAULT NULL
 						CONSTRAINT users_user_house_fk
-							REFERENCES properties(property_id)
+							REFERENCES properties(property_id),
+	user_prop_room		NUMBER(11) DEFAULT NULL
+						CONSTRAINT users_user_room_fk
+							REFERENCES rooms(room_id)
 )
 
 CREATE SEQUENCE seq_user_id START WITH 1 INCREMENT BY 1;
@@ -241,6 +307,12 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 			FROM sys.dual;
 		END IF;
 	END IF;
+
+	:NEW.user_forename := TRIM(INITCAP(:NEW.user_forename));
+	:NEW.user_surname  := TRIM(INITCAP(:NEW.user_surname));
+	:NEW.user_phone    := replace(:NEW.user_phone , ' ', '');
+	:NEW.user_pass     := replace(:NEW.user_pass , ' ', '');
+
 END;
 
 /*******************************************
@@ -289,6 +361,11 @@ BEFORE INSERT OR UPDATE ON addresses FOR EACH ROW
 			FROM sys.dual;
 		END IF;
 	END IF;
+
+	:NEW.addr_line_1   :=  TRIM(INITCAP(:NEW.addr_line_1));
+	:NEW.addr_line_2   :=  TRIM(INITCAP(:NEW.addr_line_2));
+	:NEW.addr_postcode :=  replace(:NEW.addr_postcode, ' ', '');
+	:NEW.addr_postcode :=  TRIM(UPPER(:NEW.addr_postcode));
 END;
 
 /*******************************************
@@ -321,6 +398,8 @@ BEFORE INSERT OR UPDATE ON cities FOR EACH ROW
 			FROM sys.dual;
 		END IF;
 	END IF;
+
+	:NEW.city_name := TRIM(INITCAP(:NEW.city_name));
 END;
 
 /*******************************************
@@ -341,7 +420,7 @@ CREATE TABLE track_payments
 							))
 						CONSTRAINT track_payment_amount_nn
 							NOT NULL,
-	payment_status 		VARCHAR2(30) 
+	payment_status 		VARCHAR2(30) DEFAULT 'PENDING'
 						CONSTRAINT track_payment_status_chk
 							CHECK( UPPER(payment_status) = 'PENDING' OR 
 								   UPPER(payment_status) = 'OVERDUE' OR 
@@ -355,15 +434,79 @@ CREATE TABLE track_payments
 	payment_received	TIMESTAMP
 						CONSTRAINT track_payment_received_nn
 							NOT NULL
-)
+);
+
+CREATE SEQUENCE seq_pay_track_id START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER trg_track_payments
+BEFORE INSERT OR UPDATE ON track_payments FOR EACH ROW
+	BEGIN
+	IF INSERTING THEN
+		IF :NEW.payment_id IS NULL THEN
+			SELECT seq_pay_track_id.nextval
+			INTO :NEW.payment_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+
+	:NEW.payment_status := TRIM(UPPER(:NEW.payment_status));
+END;
+
+
 
 /*******************************************
 *        MAINTENANCE REQUEST TABLE         *
 ********************************************/
-CREATE TABLE maintenance_request
+CREATE TABLE requests
 (
+	maintenance_id		NUMBER(11)
+						CONSTRAINT requests_maintenance_id_pk
+							PRIMARY KEY
+						CONSTRAINT requests_maintenance_id_nn
+							NOT NULL,
+	tracking_id 		NUMBER(11)
+						CONSTRAINT requests_tracking_id_nn
+							NOT NULL,
+	user_id 			NUMBER(11)
+						CONSTRAINT requests_user_id_nn
+							NOT NULL,
+	request_status		VARCHAR2(30) DEFAULT 'RECEIVED'
+						CONSTRAINT requests_req_status_chk
+							CHECK( UPPER(request_status) = 'RECEIVED' OR
+								   UPPER(request_status) = 'SEEN' OR
+								   UPPER(request_status) = 'SCHEDULED' OR
+								   UPPER(request_status) = 'IN PROGRESS' OR
+								   UPPER(request_status) = 'COMPLETED'
+							)
+						CONSTRAINT requests_req_status_nn
+							NOT NULL,
+	request_log_date	DATE DEFAULT SYSDATE
+						CONSTRAINT requests_req_log_date_nn
+							NOT NULL,
+	request_fin_date	DATE DEFAULT NULL
+						CONSTRAINT requests_req_fin_date_chk
+							CHECK
 
-)
+);
+
+CREATE SEQUENCE seq_requests_id START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER trg_requests
+BEFORE INSERT OR UPDATE ON requests FOR EACH ROW
+	BEGIN 
+	IF INSERTING THEN
+		IF :NEW.requests_id IS NULL THEN
+			SELECT seq_requests_id.nextval
+			INTO :NEW.requests_id
+			FROM sys.dual;
+		END IF;
+		IF :NEW.tracking_id IS NULL THEN
+		SELECT DBMS_RANDOM.STRING ('X', 16)
+		INTO :NEW.tracking_id
+		FROM sys.dual;
+		END IF;
+	END IF;
+END;
 
 /*******************************************
 *     			  FUNCTIONS  			   *
