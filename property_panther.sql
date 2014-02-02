@@ -2,7 +2,7 @@
 *  	     Property Panther Database Code	   
 *	     Author:  PRCSE		    		   
 *        Date Created: 24/01/2014		   
-*        Version: 1.0 					   
+*        Version: 2.0 					   
 ********************************************/
 
 
@@ -67,13 +67,13 @@ CREATE TABLE rooms
 							REFERENCES properties(property_id)
 						CONSTRAINT rooms_property_id_nn
 							NOT NULL,
-	room_price			NUMBER(*, 2) DEFAULT '0.00'
+	room_price			VARCHAR2(12) DEFAULT '0.00'
 						CONSTRAINT rooms_room_price_chk
 							CHECK(REGEXP_LIKE(room_price,
 								'([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'))
 						CONSTRAINT rooms_room_price_nn
 							NOT NULL,
-	room_details		VARCHAR2(1000)
+	room_details		VARCHAR2(1500)
 						CONSTRAINT rooms_room_details_nn
 							NOT NULL
 );
@@ -89,12 +89,14 @@ BEFORE INSERT OR UPDATE ON rooms FOR EACH ROW
 			INTO :NEW.room_id
 			FROM sys.dual;
 		END IF;
-		IF :NEW.tracking_id IS NULL THEN
-		SELECT DBMS_RANDOM.STRING ('X', 16)
-		INTO :NEW.tracking_id
-		FROM sys.dual;
+			IF :NEW.tracking_id IS NULL THEN
+			SELECT DBMS_RANDOM.STRING ('X', 16)
+			INTO :NEW.tracking_id
+			FROM sys.dual;
 		END IF;
 	END IF;
+
+	:NEW.room_details := TRIM(:NEW.room_details);
 END;
 
 /*******************************************
@@ -107,19 +109,19 @@ CREATE TABLE properties
 							PRIMARY KEY
 						CONSTRAINT properties_prop_id_nn
 							NOT NULL,
-	tracking_id  		VARCHAR2(32),
+	tracking_id  		VARCHAR2(18),
 	prop_addr			NUMBER(11)
 						CONSTRAINT properties_prop_addr_fk
 							REFERENCES addresses(addr_id)
 						CONSTRAINT properties_prop_addr_nn
 							NOT NULL,
-	prop_details		VARCHAR2(1000)
+	prop_details		VARCHAR2(1500)
 						CONSTRAINT properties_prop_details_nn
 							NOT NULL,
 	num_rooms			NUMBER(11)
 						CONSTRAINT properties_num_rooms_nn
 							NOT NULL,
-	prop_price			NUMBER(*, 2) DEFAULT '0.00'
+	prop_price			VARCHAR2(12) DEFAULT '0.00'
 						CONSTRAINT properties_prop_price_chk
 							CHECK(REGEXP_LIKE(prop_price,
 								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'))
@@ -147,6 +149,8 @@ BEFORE INSERT OR UPDATE ON properties FOR EACH ROW
 		FROM sys.dual;
 		END IF;
 	END IF;
+
+	:NEW.prop_details := TRIM(:NEW.prop_details);
 END;
 
 /*******************************************
@@ -178,6 +182,11 @@ CREATE TABLE payments
 								 )
 						CONSTRAINT payments_pay_status_nn
 							NOT NULL,
+	student_id 			NUMBER(11)
+						CONSTRAINT payments_student_id_fk
+							REFERENCES students(student_id)
+						CONSTRAINT payments_student_id_nn
+							NOT NULL,
 	property_id     	NUMBER(11) 
 						CONSTRAINT payments_property_id_fk
 							REFERENCES properties(property_id)
@@ -197,6 +206,8 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 			FROM sys.dual;
 		END IF;
 	END IF;
+
+	:NEW.payment_status := TRIM(UPPER(:NEW.payment_status));
 END;
 
 /*******************************************
@@ -308,11 +319,19 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 		END IF;
 	END IF;
 
+	IF UPDATING THEN
+		/* Flag that the user has changed their password */
+		IF(:NEW.user_pass != :OLD.user_pass) THEN
+			:NEW.pass_changed := 1;
+		END IF;
+	END IF;
+
+	/* Provide any formatting */
 	:NEW.user_forename := TRIM(INITCAP(:NEW.user_forename));
 	:NEW.user_surname  := TRIM(INITCAP(:NEW.user_surname));
+	:NEW.user_email    := TRIM(LOWER(:NEW.user_email));
 	:NEW.user_phone    := replace(:NEW.user_phone , ' ', '');
 	:NEW.user_pass     := replace(:NEW.user_pass , ' ', '');
-
 END;
 
 /*******************************************
@@ -362,8 +381,8 @@ BEFORE INSERT OR UPDATE ON addresses FOR EACH ROW
 		END IF;
 	END IF;
 
-	:NEW.addr_line_1   :=  TRIM(INITCAP(:NEW.addr_line_1));
-	:NEW.addr_line_2   :=  TRIM(INITCAP(:NEW.addr_line_2));
+	:NEW.addr_line_1   :=  TRIM(UPPER(SUBSTR(:NEW.addr_line_1,1,1))||SUBSTR(:NEW.addr_line_1,2)) ||SUBSTR(:NEW.addr_line_1,3));
+	:NEW.addr_line_2   :=  TRIM(UPPER(SUBSTR(:NEW.addr_line_2,1,1))||SUBSTR(:NEW.addr_line_2,2)) ||SUBSTR(:NEW.addr_line_2,3));
 	:NEW.addr_postcode :=  replace(:NEW.addr_postcode, ' ', '');
 	:NEW.addr_postcode :=  TRIM(UPPER(:NEW.addr_postcode));
 END;
@@ -399,7 +418,8 @@ BEFORE INSERT OR UPDATE ON cities FOR EACH ROW
 		END IF;
 	END IF;
 
-	:NEW.city_name := TRIM(INITCAP(:NEW.city_name));
+	:NEW.city_name := UPPER(SUBSTR(:NEW.city_name,1,1))||SUBSTR(:NEW.city_name,2);
+
 END;
 
 /*******************************************
@@ -413,7 +433,7 @@ CREATE TABLE track_payments
 	student_id			NUMBER(11)
 						CONSTRAINT track_student_id_nn
 							NOT NULL,
-	payment_amount		NUMBER(11)
+	payment_amount		VARCHAR2(15)
 						CONSTRAINT track_payment_amount_chk
 							CHECK(REGEXP_LIKE(payment_amount,
 								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'
@@ -424,16 +444,15 @@ CREATE TABLE track_payments
 						CONSTRAINT track_payment_status_chk
 							CHECK( UPPER(payment_status) = 'PENDING' OR 
 								   UPPER(payment_status) = 'OVERDUE' OR 
-								   UPPER(payment_status) = 'PAID'
+								   UPPER(payment_status) = 'PAID' OR
+								   UPPER(payment_status) = 'PAID LATE'
 								 )
 						CONSTRAINT track_payment_status_nn
 							NOT NULL,
-	payment_due 		TIMESTAMP
+	payment_due 		DATE
 						CONSTRAINT track_payment_due_nn
 							NOT NULL,
-	payment_received	TIMESTAMP
-						CONSTRAINT track_payment_received_nn
-							NOT NULL
+	payment_received	DATE DEFAULT NULL
 );
 
 CREATE SEQUENCE seq_pay_track_id START WITH 1 INCREMENT BY 1;
@@ -447,9 +466,31 @@ BEFORE INSERT OR UPDATE ON track_payments FOR EACH ROW
 			INTO :NEW.payment_id
 			FROM sys.dual;
 		END IF;
+
+		/* Handle the users payment status automatically on insert */
+		IF (:NEW.payment_received != NULL) THEN
+			IF(:NEW.payment_received <= :NEW.payment_due) THEN
+				:NEW.payment_status = 'PAID'
+			END IF;
+			IF(:NEW.payment_received > :NEW.payment_due) THEN
+				:NEW.payment_stauts = 'OVERDUE';
+			END IF;
+		END IF;
 	END IF;
 
+	IF UPDATING THEN
+		/* The user paid late, so update their status to paid late */
+		IF(:NEW.payment_status == 'PAID') THEN
+			IF(:OLD.payment_received > :OLD.payment_due)
+				:NEW.payment_status == 'PAID LATE';
+			END IF;
+		END IF;
+	END IF;
+
+	/* Perform any formatting */
 	:NEW.payment_status := TRIM(UPPER(:NEW.payment_status));
+	:NEW.payment_amount := TRIM(:NEW.payment_amount);
+
 END;
 
 
@@ -459,7 +500,7 @@ END;
 ********************************************/
 CREATE TABLE requests
 (
-	maintenance_id		NUMBER(11)
+	requests_id		NUMBER(11)
 						CONSTRAINT requests_maintenance_id_pk
 							PRIMARY KEY
 						CONSTRAINT requests_maintenance_id_nn
@@ -468,6 +509,8 @@ CREATE TABLE requests
 						CONSTRAINT requests_tracking_id_nn
 							NOT NULL,
 	user_id 			NUMBER(11)
+						CONSTRAINT requests_user_id_fk
+							REFERENCES users(user_id)
 						CONSTRAINT requests_user_id_nn
 							NOT NULL,
 	request_status		VARCHAR2(30) DEFAULT 'RECEIVED'
@@ -484,9 +527,6 @@ CREATE TABLE requests
 						CONSTRAINT requests_req_log_date_nn
 							NOT NULL,
 	request_fin_date	DATE DEFAULT NULL
-						CONSTRAINT requests_req_fin_date_chk
-							CHECK
-
 );
 
 CREATE SEQUENCE seq_requests_id START WITH 1 INCREMENT BY 1;
@@ -501,16 +541,33 @@ BEFORE INSERT OR UPDATE ON requests FOR EACH ROW
 			FROM sys.dual;
 		END IF;
 		IF :NEW.tracking_id IS NULL THEN
-		SELECT DBMS_RANDOM.STRING ('X', 16)
-		INTO :NEW.tracking_id
-		FROM sys.dual;
+			SELECT DBMS_RANDOM.STRING ('X', 16)
+			INTO :NEW.tracking_id
+			FROM sys.dual;
+		END IF;
+
+		/* If a fin date is specified then set it */
+		IF(:NEW.request_status == 'COMPLETED') THEN
+			IF(:NEW.request_fin_date >= :NEW.request_log_date) THEN
+				request_fin_date := :NEW.request_fin_date;
+			END IF;
 		END IF;
 	END IF;
+
+	/* Update the fin date when job status is completed */
+	IF UPDATING THEN 
+		IF(:NEW.request_status == 'COMPLETED') THEN
+			IF(SYSDATE >= :OLD.request_log_date) THEN
+				:NEW.request_fin_date := SYSDATE;
+			END IF;
+		END IF;
+	END IF;
+
+	:NEW.request_status := TRIM(UPPER(:NEW.request_stats));
 END;
 
 /*******************************************
 *     			  FUNCTIONS  			   *
 ********************************************/
-
 
 
