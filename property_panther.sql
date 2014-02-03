@@ -88,8 +88,8 @@ BEFORE INSERT OR UPDATE ON addresses FOR EACH ROW
 		END IF;
 	END IF;
 
-	:NEW.addr_line_1   :=  TRIM(UPPER(SUBSTR(:NEW.addr_line_1,1,1)||SUBSTR(:NEW.addr_line_1,2) ||SUBSTR(:NEW.addr_line_1,3)));
-	:NEW.addr_line_2   :=  TRIM(UPPER(SUBSTR(:NEW.addr_line_2,1,1)||SUBSTR(:NEW.addr_line_2,2) ||SUBSTR(:NEW.addr_line_2,3)));
+	:NEW.addr_line_1   :=  TRIM(UPPER(:NEW.addr_line_1));
+	:NEW.addr_line_2   :=  TRIM(UPPER(:NEW.addr_line_2));
 	:NEW.addr_postcode :=  replace(:NEW.addr_postcode, ' ', '');
 	:NEW.addr_postcode :=  TRIM(UPPER(:NEW.addr_postcode));
 END;
@@ -217,15 +217,16 @@ CREATE TABLE gallery
 	room_id 			NUMBER(11)
 						CONSTRAINT gallery_room_id_fk
 							REFERENCES rooms(room_id)
-						CONSTRAINT gallery_room_id_nn
-							NOT NULL,
-	img_type			VARCHAR2(10) DEFAULT 'GALLERY'
+	img_type			VARCHAR2(20) DEFAULT 'GALLERY'
 						CONSTRAINT gallery_img_type_chk
-							CHECK(REGEXP_LIKE(img_type,
-									'\b(GALLERY|COVER)\b'))
+							CHECK
+							(	
+								UPPER(img_type) = 'GALLERY' OR
+								UPPER(img_type) = 'COVER'
+							));
 						CONSTRAINT gallery_img_type_nn
 							NOT NULL,
-	img_path			VARCHAR2(20)
+	img_path			VARCHAR2(200)
 );
 
 CREATE SEQUENCE seq_img_id START WITH 1 INCREMENT BY 1;
@@ -259,12 +260,6 @@ CREATE TABLE titles
 	CONSTRAINT title_title_name_chk_init
   		CHECK (title_name = INITCAP(title_name))
 );
-
-INSERT INTO titles(title_name) VALUES('Miss');
-INSERT INTO titles(title_name) VALUES('Mrs');
-INSERT INTO titles(title_name) VALUES('Ms');
-INSERT INTO titles(title_name) VALUES('Sir');
-INSERT INTO titles(title_name) VALUES('Mr');
 
 CREATE SEQUENCE seq_title_id START WITH 1 INCREMENT BY 1;
 
