@@ -447,6 +447,14 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 	IF:NEW.payment_received > :NEW.payment_due THEN
 		:NEW.payment_status := 'PAID LATE';
 	END IF;
+	-- Is the payment pending?
+	IF SYSDATE < :NEW.payment_due AND :NEW.payment_received IS NULL THEN
+		:NEW.payment_status := 'PENDING';
+	END IF;
+	-- Is the payment overdue?
+	IF SYSDATE > :NEW.payment_due AND :NEW.payment_received IS NULL THEN
+		:NEW.payment_status := 'OVERDUE';
+	END IF;
 	-- A future payment cannot of been received, set to current date
 	IF :NEW.payment_received > SYSDATE THEN 
 		:NEW.payment_received := SYSDATE;
