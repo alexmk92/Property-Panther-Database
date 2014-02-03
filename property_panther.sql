@@ -438,34 +438,6 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 		END IF;
 	END IF;
 
-	/* ON UPDATE OR DELETE append to the payment history */
-	IF UPDATING OR DELETING THEN
-		INSERT INTO track_payments
-		(
-	    	payment_history_id,
-			payment_id,
-			user_id,
-			reference_id,
-			payment_amount,
-			payment_status,
-			payment_due,
-			payment_received,
-			property_id
-		)
-		VALUES
-		(
-			'',
-			:OLD.payment_id,
-			:OLD.user_id,
-			:OLD.reference_id,
-			:OLD.payment_amount,
-			:OLD.payment_status,
-			:OLD.payment_due,
-			:OLD.payment_received,
-			:OLD.property_id
-		);
-	END IF;
-
 	/* Handle the users payment status automatically on insert */
 	-- Has the user paid on time?
 	IF:NEW.payment_received <= :NEW.payment_due THEN
