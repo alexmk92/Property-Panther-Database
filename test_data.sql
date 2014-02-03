@@ -69,15 +69,30 @@ INSERT INTO gallery VALUES('', 4, '', 'GALLERY', '../properties/property_4_loung
 /*******************************************
 *            PAYMENTS TEST DATA            *
 ********************************************/
-INSERT INTO payments VALUES();
+INSERT INTO payments VALUES ('', 4, '', '500.00', '', '01-FEB-14', SYSDATE, get_property(4));
+INSERT INTO payments VALUES ('', 4, '', '500.00', '', '01-SEP-13', '03-SEP-13', get_property(4));
+INSERT INTO payments VALUES ('', 4, '', '500.00', '', '01-OCT-13', '01-OCT-13', get_property(4));
+INSERT INTO payments VALUES ('', 4, '', '500.00', '', '01-NOV-13', '28-OCT-13', get_property(4));
+INSERT INTO payments VALUES ('', 4, '', '500.00', '', '01-DEC-13', '01-DEC-13', get_property(4));
+INSERT INTO payments VALUES ('', 5, '', '700.00', '', '17-JAN-14', '05-JAN-14', get_property(5));
+INSERT INTO payments VALUES ('', 6, '', '400.00', '', '09-JAN-14', '08-JAN-14', get_property(6));
+INSERT INTO payments VALUES ('', 7, '', '400.00', '', '01-FEB-14', '', get_property(7));
+INSERT INTO payments VALUES ('', 7, '', '400.00', '', '03-MAR-14', '', get_property(7));
 
 /*******************************************
 *            REQUESTS TEST DATA            *
 ********************************************/
-INSERT INTO requests VALUES();
+INSERT INTO requests VALUES ('', '', 5, 'My boiler has broken, the light is no longer coming on and I cannot shower.', 'RECEIVED', SYSDATE, '');
+INSERT INTO requests VALUES ('', '', 6, 'My radiator is no longer working.', 'RECEIVED', SYSDATE, '');
+INSERT INTO requests VALUES ('', '', 5, 'My front door has been kicked in by an angry neighbour.', 'RECEIVED', SYSDATE, '');
+INSERT INTO requests VALUES ('', '', 5, 'There is damp on my wall.', '', SYSDATE, '');
 
 /*******************************************
 *              USERS TEST DATA             *
 ********************************************/
-INSERT INTO users VALUES();
+INSERT INTO users VALUES('', 'AlexMK92@live.co.uk', 'password1', '', 5, 10, 'Alexander', 'Sims', '07969 118566', 0, '', '');
+INSERT INTO users VALUES('', 'a.stevenson@gmail.com', 'password1', '', 5, 10, 'Adam', 'Stevenson', '07969 445934', 0, 1, 1);
+INSERT INTO users VALUES('', 'jamie.shepherd@live.co.uk', 'password1', '', 5, 10, 'Jamie', 'Shepherd', '07948433223', 0, 1, 2);
+INSERT INTO users VALUES('', 'thomas.knowles@students.plymouth.ac.uk', 'password1', '', 5, 10, 'Thomas', 'Knowles', '078955 54323', 0, 3, 5);
+INSERT INTO users VALUES('', 'rekthar@live.co.uk', 'password1', '', 5, 10, 'Jason', 'Dee', '07894454032', 0, 1, 4);
 
