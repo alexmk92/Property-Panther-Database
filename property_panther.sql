@@ -7,96 +7,91 @@
 
 
 /*******************************************
-*               GALLERY TABLE              *
+*                CITIES TABLE              *
 ********************************************/
-CREATE TABLE gallery 
+CREATE TABLE cities 
 (
-	img_id 				NUMBER(11)
-						CONSTRAINT gallery_img_id_pk
+	city_id				NUMBER(11)
+						CONSTRAINT cities_city_id_pk
 							PRIMARY KEY
-						CONSTRAINT gallery_img_id_nn
+						CONSTRAINT cities_city_id_nn
 							NOT NULL,
-	property_id 		NUMBER(11)
-						CONSTRAINT gallery_property_id_fk
-							REFERENCES properties(property_id)
-						CONSTRAINT gallery_property_id_nn
-							NOT NULL,
-	room_id 			NUMBER(11)
-						CONSTRAINT gallery_room_id_fk
-							REFERENCES rooms(room_id)
-						CONSTRAINT gallery_room_id_nn
-							NOT NULL,
-	img_type			VARCHAR2(10) DEFAULT 'GALLERY'
-						CONSTRAINT gallery_img_type_chk
-							CHECK(REGEXP_LIKE(img_type,
-									'\b(GALLERY|COVER)\b'))
-						CONSTRAINT gallery_img_type_nn
-							NOT NULL,
-	img_file			BLOB
-);
+	city_name			VARCHAR2(100)
+						CONSTRAINT cities_city_name_chk
+							CHECK(REGEXP_LIKE(city_name,
+								'[A-Za-z]{1,100}'))
+						CONSTRAINT cities_city_name_nn
+							NOT NULL
+)
 
-CREATE SEQUENCE seq_img_id START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE seq_city_id START WITH 1 INCREMENT BY 1
 
-CREATE OR REPLACE TRIGGER trg_gallery
-BEFORE INSERT OR UPDATE ON gallery FOR EACH ROW
+CREATE OR REPLACE TRIGGER trg_cities
+BEFORE INSERT OR UPDATE ON cities FOR EACH ROW
 	BEGIN 
 	IF INSERTING THEN
-		IF :NEW.img_id IS NULL THEN
-			SELECT seq_img_id.nextval
-			INTO :NEW.img_id
+		IF :NEW.city_id IS NULL THEN
+			SELECT seq_city_id.nextval
+			INTO :NEW.city_id
 			FROM sys.dual;
 		END IF;
 	END IF;
+
+	:NEW.city_name := UPPER(SUBSTR(:NEW.city_name,1,1))||SUBSTR(:NEW.city_name,2);
+
 END;
 
 /*******************************************
-*               ROOMS TABLE                *
+*              ADDRESSES TABLE             *
 ********************************************/
-CREATE TABLE rooms
+CREATE TABLE addresses 
 (
-	room_id 			NUMBER(11)
-						CONSTRAINT rooms_room_id_pk
+	addr_id				NUMBER(11)
+						CONSTRAINT addresses_addr_id_pk
 							PRIMARY KEY
-						CONSTRAINT rooms_room_id_nn
+						CONSTRAINT addresses_addr_id_nn
 							NOT NULL,
-	tracking_id			VARCHAR2(30) 
-						CONSTRAINT rooms_tracking_id_nn
+	addr_line_1			VARCHAR2(100)
+						CONSTRAINT addresses_addr_ln_1_chk
+							CHECK(REGEXP_LIKE(addr_line_1,
+								'[A-Za-z0-9]'))
+						CONSTRAINT addresses_addr_ln_1_nn
 							NOT NULL,
-	property_id     	NUMBER(11)
-						CONSTRAINT rooms_property_id_fk
-							REFERENCES properties(property_id)
-						CONSTRAINT rooms_property_id_nn
+	addr_line_2			VARCHAR2(100)
+						CONSTRAINT addresses_addr_ln_2_chk
+							CHECK(REGEXP_LIKE(addr_line_2,
+								'[A-Za-z0-9]')),
+	addr_postcode		VARCHAR2(12)
+						CONSTRAINT addresses_addr_post_chk
+							CHECK(REGEXP_LIKE(addr_postcode,
+								'(([A-PR-UW-Z]{1}[A-IK-Y]?)([0-9]?[A-HJKS-UW]?[ABEHMNPRVWXY]?|[0-9]?[0-9]?))\s?([0-9]{1}[ABD-HJLNP-UW-Z]{2})'
+							))
+						CONSTRAINT addresses_addr_post_nn
 							NOT NULL,
-	room_price			VARCHAR2(12) DEFAULT '0.00'
-						CONSTRAINT rooms_room_price_chk
-							CHECK(REGEXP_LIKE(room_price,
-								'([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'))
-						CONSTRAINT rooms_room_price_nn
-							NOT NULL,
-	room_details		VARCHAR2(1500)
-						CONSTRAINT rooms_room_details_nn
+	addr_city			NUMBER(11)
+						CONSTRAINT addresses_addr_city_fk
+							REFERENCES cities(city_id)
+						CONSTRAINT addresses_addr_city_nn
 							NOT NULL
-);
+)
 
-CREATE SEQUENCE seq_room_id START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE seq_addr_id START WITH 1 INCREMENT BY 1;
 
-CREATE OR REPLACE TRIGGER trg_rooms
-BEFORE INSERT OR UPDATE ON rooms FOR EACH ROW
+CREATE OR REPLACE TRIGGER trg_addresses
+BEFORE INSERT OR UPDATE ON addresses FOR EACH ROW
 	BEGIN 
 	IF INSERTING THEN
-		IF :NEW.room_id IS NULL THEN
-			SELECT seq_room_id.nextval
-			INTO :NEW.room_id
-			FROM sys.dual;
-		END IF;
-			IF :NEW.tracking_id IS NULL THEN
-			SELECT DBMS_RANDOM.STRING ('X', 16)
-			INTO :NEW.tracking_id
+		IF :NEW.addr_id IS NULL THEN
+			SELECT seq_addr_id.nextval
+			INTO :NEW.addr_id
 			FROM sys.dual;
 		END IF;
 	END IF;
 
-	:NEW.room_details := TRIM(:NEW.room_details);
+	:NEW.addr_line_1   :=  TRIM(UPPER(SUBSTR(:NEW.addr_line_1,1,1))||SUBSTR(:NEW.addr_line_1,2)) ||SUBSTR(:NEW.addr_line_1,3));
+	:NEW.addr_line_2   :=  TRIM(UPPER(SUBSTR(:NEW.addr_line_2,1,1))||SUBSTR(:NEW.addr_line_2,2)) ||SUBSTR(:NEW.addr_line_2,3));
+	:NEW.addr_postcode :=  replace(:NEW.addr_postcode, ' ', '');
+	:NEW.addr_postcode :=  TRIM(UPPER(:NEW.addr_postcode));
 END;
 
 /*******************************************
@@ -109,7 +104,9 @@ CREATE TABLE properties
 							PRIMARY KEY
 						CONSTRAINT properties_prop_id_nn
 							NOT NULL,
-	tracking_id  		VARCHAR2(18),
+	tracking_id  		VARCHAR2(18)
+						CONSTRAINT properties_tracking_id_nn
+							NOT NULL,
 	prop_addr			NUMBER(11)
 						CONSTRAINT properties_prop_addr_fk
 							REFERENCES addresses(addr_id)
@@ -151,6 +148,104 @@ BEFORE INSERT OR UPDATE ON properties FOR EACH ROW
 	END IF;
 
 	:NEW.prop_details := TRIM(:NEW.prop_details);
+	:NEW.tracking_id  := TRIM(:NEW.tracking_id);
+END;
+
+/*******************************************
+*               GALLERY TABLE              *
+********************************************/
+CREATE TABLE gallery 
+(
+	img_id 				NUMBER(11)
+						CONSTRAINT gallery_img_id_pk
+							PRIMARY KEY
+						CONSTRAINT gallery_img_id_nn
+							NOT NULL,
+	property_id 		NUMBER(11)
+						CONSTRAINT gallery_property_id_fk
+							REFERENCES properties(property_id)
+						CONSTRAINT gallery_property_id_nn
+							NOT NULL,
+	room_id 			NUMBER(11)
+						CONSTRAINT gallery_room_id_fk
+							REFERENCES rooms(room_id)
+						CONSTRAINT gallery_room_id_nn
+							NOT NULL,
+	img_type			VARCHAR2(10) DEFAULT 'GALLERY'
+						CONSTRAINT gallery_img_type_chk
+							CHECK(REGEXP_LIKE(img_type,
+									'\b(GALLERY|COVER)\b'))
+						CONSTRAINT gallery_img_type_nn
+							NOT NULL,
+	img_path			VARCHAR2(20)
+);
+
+CREATE SEQUENCE seq_img_id START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER trg_gallery
+BEFORE INSERT OR UPDATE ON gallery FOR EACH ROW
+	BEGIN 
+	IF INSERTING THEN
+		IF :NEW.img_id IS NULL THEN
+			SELECT seq_img_id.nextval
+			INTO :NEW.img_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+
+	:NEW.img_type := TRIM(UPPER(:NEW.img_type));
+	:NEW.img_file := TRIM(LOWER(:NEW.img_file));
+END;
+
+/*******************************************
+*               ROOMS TABLE                *
+********************************************/
+CREATE TABLE rooms
+(
+	room_id 			NUMBER(11)
+						CONSTRAINT rooms_room_id_pk
+							PRIMARY KEY
+						CONSTRAINT rooms_room_id_nn
+							NOT NULL,
+	tracking_id			VARCHAR2(18) 
+						CONSTRAINT rooms_tracking_id_nn
+							NOT NULL,
+	property_id     	NUMBER(11)
+						CONSTRAINT rooms_property_id_fk
+							REFERENCES properties(property_id)
+						CONSTRAINT rooms_property_id_nn
+							NOT NULL,
+	room_price			VARCHAR2(12) DEFAULT '0.00'
+						CONSTRAINT rooms_room_price_chk
+							CHECK(REGEXP_LIKE(room_price,
+								'([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'))
+						CONSTRAINT rooms_room_price_nn
+							NOT NULL,
+	room_details		VARCHAR2(1500)
+						CONSTRAINT rooms_room_details_nn
+							NOT NULL
+);
+
+CREATE SEQUENCE seq_room_id START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER trg_rooms
+BEFORE INSERT OR UPDATE ON rooms FOR EACH ROW
+	BEGIN 
+	IF INSERTING THEN
+		IF :NEW.room_id IS NULL THEN
+			SELECT seq_room_id.nextval
+			INTO :NEW.room_id
+			FROM sys.dual;
+		END IF;
+			IF :NEW.tracking_id IS NULL THEN
+			SELECT DBMS_RANDOM.STRING ('X', 16)
+			INTO :NEW.tracking_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+
+	:NEW.room_details := TRIM(:NEW.room_details);
+	:NEW.room_price   := TRIM(:NEW.room_price);
 END;
 
 /*******************************************
@@ -168,25 +263,26 @@ CREATE TABLE payments
 							REFERENCES users(user_id)
 						CONSTRAINT payments_user_id_nn
 							NOT NULL,
-	payment_date    	DATE
-						CONSTRAINT payments_payment_date_nn
-							NOT NULL,
-	payment_due 		DATE
-						CONSTRAINT payments_payment_due_nn
+	payment_amount		VARCHAR2(15)
+						CONSTRAINT track_payment_amount_chk
+							CHECK(REGEXP_LIKE(payment_amount,
+								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'
+							))
+						CONSTRAINT track_payment_amount_nn
 							NOT NULL,
 	payment_status		VARCHAR(50) DEFAULT 'PENDING'
 						CONSTRAINT payments_pay_status_chk
 							CHECK( UPPER(payment_status) = 'PENDING' OR 
 								   UPPER(payment_status) = 'OVERDUE' OR 
-								   UPPER(payment_status) = 'PAID'
+								   UPPER(payment_status) = 'PAID' OR
+								   UPPER(payment_status) = 'PAID LATE'
 								 )
 						CONSTRAINT payments_pay_status_nn
 							NOT NULL,
-	student_id 			NUMBER(11)
-						CONSTRAINT payments_student_id_fk
-							REFERENCES students(student_id)
-						CONSTRAINT payments_student_id_nn
+	payment_due 		DATE
+						CONSTRAINT payments_payment_due_nn
 							NOT NULL,
+	payment_received    DATE DEFAULT NULL,
 	property_id     	NUMBER(11) 
 						CONSTRAINT payments_property_id_fk
 							REFERENCES properties(property_id)
@@ -205,9 +301,112 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 			INTO :NEW.payment_id
 			FROM sys.dual;
 		END IF;
+		/* Handle the users payment status automatically on insert */
+		IF (:NEW.payment_received != NULL) THEN
+
+			:NEW.payment_received == SYSDATE;
+
+			IF(:NEW.payment_received <= :NEW.payment_due) THEN
+				:NEW.payment_status = 'PAID'
+			END IF;
+			IF(:NEW.payment_received > :NEW.payment_due) THEN
+				:NEW.payment_stauts = 'OVERDUE';
+			END IF;
+		END IF;
 	END IF;
 
+	IF UPDATING THEN
+		/* The user paid late, so update their status to paid late */
+		IF(:NEW.payment_status == 'PAID') THEN
+			IF(:NEW.payment_received > :OLD.payment_due OR :OLD.payment_received > :OLD.payment_due) THEN
+				:NEW.payment_status == 'PAID LATE';
+			END IF;
+		END IF;
+	END IF;
+
+	INSERT INTO track_payments
+	(
+		payment_id,
+		user_id,
+		payment_amount,
+		payment_status,
+		payment_due,
+		payment_received,
+		property_id
+	)
+	VALUES
+	(
+		'',
+		:OLD.user_id,
+		:OLD.payment_amount,
+		:OLD.payment_status,
+		:OLD.payment_due,
+		:OLD.payment_received,
+		:OLD.property_id
+	);
+
+
+	/* Perform any formatting */
 	:NEW.payment_status := TRIM(UPPER(:NEW.payment_status));
+	:NEW.payment_amount := TRIM(:NEW.payment_amount);
+
+END;
+
+/*******************************************
+*          PAYMENT TRACKING TABLE          *
+********************************************/
+CREATE TABLE track_payments 
+(
+	payment_id 			NUMBER(11)
+						CONSTRAINT track_payment_id_nn
+							NOT NULL,
+	student_id			NUMBER(11)
+						CONSTRAINT track_student_id_nn
+							NOT NULL,
+	payment_amount		VARCHAR2(15)
+						CONSTRAINT track_payment_amount_chk
+							CHECK(REGEXP_LIKE(payment_amount,
+								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'
+							))
+						CONSTRAINT track_payment_amount_nn
+							NOT NULL,
+	payment_status 		VARCHAR2(30) DEFAULT 'PENDING'
+						CONSTRAINT track_payment_status_chk
+							CHECK( UPPER(payment_status) = 'PENDING' OR 
+								   UPPER(payment_status) = 'OVERDUE' OR 
+								   UPPER(payment_status) = 'PAID' OR
+								   UPPER(payment_status) = 'PAID LATE'
+								 )
+						CONSTRAINT track_payment_status_nn
+							NOT NULL,
+	payment_due 		DATE
+						CONSTRAINT track_payment_due_nn
+							NOT NULL,
+	payment_received	DATE DEFAULT NULL,
+	property_id     	NUMBER(11) 
+						CONSTRAINT payments_property_id_fk
+							REFERENCES properties(property_id)
+						CONSTRAINT payments_property_id_nn
+							NOT NULL     
+);
+
+CREATE SEQUENCE seq_pay_track_id START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER trg_track_payments
+BEFORE INSERT OR UPDATE ON track_payments FOR EACH ROW
+	BEGIN
+	IF INSERTING THEN
+		IF :NEW.payment_id IS NULL THEN
+			SELECT seq_pay_track_id.nextval
+			INTO :NEW.payment_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+
+	/* Perform any formatting */
+	:NEW.payment_status := TRIM(UPPER(:NEW.payment_status));
+	:NEW.payment_amount := TRIM(:NEW.payment_amount);
+
 END;
 
 /*******************************************
@@ -333,167 +532,6 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 	:NEW.user_phone    := replace(:NEW.user_phone , ' ', '');
 	:NEW.user_pass     := replace(:NEW.user_pass , ' ', '');
 END;
-
-/*******************************************
-*              ADDRESSES TABLE             *
-********************************************/
-CREATE TABLE addresses 
-(
-	addr_id				NUMBER(11)
-						CONSTRAINT addresses_addr_id_pk
-							PRIMARY KEY
-						CONSTRAINT addresses_addr_id_nn
-							NOT NULL,
-	addr_line_1			VARCHAR2(100)
-						CONSTRAINT addresses_addr_ln_1_chk
-							CHECK(REGEXP_LIKE(addr_line_1,
-								'[A-Za-z0-9]'))
-						CONSTRAINT addresses_addr_ln_1_nn
-							NOT NULL,
-	addr_line_2			VARCHAR2(100)
-						CONSTRAINT addresses_addr_ln_2_chk
-							CHECK(REGEXP_LIKE(addr_line_2,
-								'[A-Za-z0-9]')),
-	addr_postcode		VARCHAR2(12)
-						CONSTRAINT addresses_addr_post_chk
-							CHECK(REGEXP_LIKE(addr_postcode,
-								'(([A-PR-UW-Z]{1}[A-IK-Y]?)([0-9]?[A-HJKS-UW]?[ABEHMNPRVWXY]?|[0-9]?[0-9]?))\s?([0-9]{1}[ABD-HJLNP-UW-Z]{2})'
-							))
-						CONSTRAINT addresses_addr_post_nn
-							NOT NULL,
-	addr_city			NUMBER(11)
-						CONSTRAINT addresses_addr_city_fk
-							REFERENCES cities(city_id)
-						CONSTRAINT addresses_addr_city_nn
-							NOT NULL
-)
-
-CREATE SEQUENCE seq_addr_id START WITH 1 INCREMENT BY 1;
-
-CREATE OR REPLACE TRIGGER trg_addresses
-BEFORE INSERT OR UPDATE ON addresses FOR EACH ROW
-	BEGIN 
-	IF INSERTING THEN
-		IF :NEW.addr_id IS NULL THEN
-			SELECT seq_addr_id.nextval
-			INTO :NEW.addr_id
-			FROM sys.dual;
-		END IF;
-	END IF;
-
-	:NEW.addr_line_1   :=  TRIM(UPPER(SUBSTR(:NEW.addr_line_1,1,1))||SUBSTR(:NEW.addr_line_1,2)) ||SUBSTR(:NEW.addr_line_1,3));
-	:NEW.addr_line_2   :=  TRIM(UPPER(SUBSTR(:NEW.addr_line_2,1,1))||SUBSTR(:NEW.addr_line_2,2)) ||SUBSTR(:NEW.addr_line_2,3));
-	:NEW.addr_postcode :=  replace(:NEW.addr_postcode, ' ', '');
-	:NEW.addr_postcode :=  TRIM(UPPER(:NEW.addr_postcode));
-END;
-
-/*******************************************
-*                CITIES TABLE              *
-********************************************/
-CREATE TABLE cities 
-(
-	city_id				NUMBER(11)
-						CONSTRAINT cities_city_id_pk
-							PRIMARY KEY
-						CONSTRAINT cities_city_id_nn
-							NOT NULL,
-	city_name			VARCHAR2(100)
-						CONSTRAINT cities_city_name_chk
-							CHECK(REGEXP_LIKE(city_name,
-								'[A-Za-z]{1,100}'))
-						CONSTRAINT cities_city_name_nn
-							NOT NULL
-)
-
-CREATE SEQUENCE seq_city_id START WITH 1 INCREMENT BY 1
-
-CREATE OR REPLACE TRIGGER trg_cities
-BEFORE INSERT OR UPDATE ON cities FOR EACH ROW
-	BEGIN 
-	IF INSERTING THEN
-		IF :NEW.city_id IS NULL THEN
-			SELECT seq_city_id.nextval
-			INTO :NEW.city_id
-			FROM sys.dual;
-		END IF;
-	END IF;
-
-	:NEW.city_name := UPPER(SUBSTR(:NEW.city_name,1,1))||SUBSTR(:NEW.city_name,2);
-
-END;
-
-/*******************************************
-*          PAYMENT TRACKING TABLE          *
-********************************************/
-CREATE TABLE track_payments 
-(
-	payment_id 			NUMBER(11)
-						CONSTRAINT track_payment_id_nn
-							NOT NULL,
-	student_id			NUMBER(11)
-						CONSTRAINT track_student_id_nn
-							NOT NULL,
-	payment_amount		VARCHAR2(15)
-						CONSTRAINT track_payment_amount_chk
-							CHECK(REGEXP_LIKE(payment_amount,
-								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'
-							))
-						CONSTRAINT track_payment_amount_nn
-							NOT NULL,
-	payment_status 		VARCHAR2(30) DEFAULT 'PENDING'
-						CONSTRAINT track_payment_status_chk
-							CHECK( UPPER(payment_status) = 'PENDING' OR 
-								   UPPER(payment_status) = 'OVERDUE' OR 
-								   UPPER(payment_status) = 'PAID' OR
-								   UPPER(payment_status) = 'PAID LATE'
-								 )
-						CONSTRAINT track_payment_status_nn
-							NOT NULL,
-	payment_due 		DATE
-						CONSTRAINT track_payment_due_nn
-							NOT NULL,
-	payment_received	DATE DEFAULT NULL
-);
-
-CREATE SEQUENCE seq_pay_track_id START WITH 1 INCREMENT BY 1;
-
-CREATE OR REPLACE TRIGGER trg_track_payments
-BEFORE INSERT OR UPDATE ON track_payments FOR EACH ROW
-	BEGIN
-	IF INSERTING THEN
-		IF :NEW.payment_id IS NULL THEN
-			SELECT seq_pay_track_id.nextval
-			INTO :NEW.payment_id
-			FROM sys.dual;
-		END IF;
-
-		/* Handle the users payment status automatically on insert */
-		IF (:NEW.payment_received != NULL) THEN
-			IF(:NEW.payment_received <= :NEW.payment_due) THEN
-				:NEW.payment_status = 'PAID'
-			END IF;
-			IF(:NEW.payment_received > :NEW.payment_due) THEN
-				:NEW.payment_stauts = 'OVERDUE';
-			END IF;
-		END IF;
-	END IF;
-
-	IF UPDATING THEN
-		/* The user paid late, so update their status to paid late */
-		IF(:NEW.payment_status == 'PAID') THEN
-			IF(:OLD.payment_received > :OLD.payment_due)
-				:NEW.payment_status == 'PAID LATE';
-			END IF;
-		END IF;
-	END IF;
-
-	/* Perform any formatting */
-	:NEW.payment_status := TRIM(UPPER(:NEW.payment_status));
-	:NEW.payment_amount := TRIM(:NEW.payment_amount);
-
-END;
-
-
 
 /*******************************************
 *        MAINTENANCE REQUEST TABLE         *
