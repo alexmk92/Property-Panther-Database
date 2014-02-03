@@ -301,7 +301,7 @@ CREATE TABLE users
 						CONSTRAINT users_user_pass_nn
 							NOT NULL,
 	pass_changed		NUMBER(1) DEFAULT 0,
-	user_addr			NUMBER(11)
+	user_home_addr		NUMBER(11)
 						CONSTRAINT users_user_addr_fk
 							REFERENCES addresses(addr_id),
 	user_title			NUMBER(11) 
@@ -321,7 +321,7 @@ CREATE TABLE users
 						CONSTRAINT users_user_phone_chk
 							CHECK(REGEXP_LIKE(user_phone,
 								'[0-9]{5}\s?[0-9]{6}')),
-	user_permissions 	NUMBER(11) DEFAULT '0'
+	user_permissions 	NUMBER(11) DEFAULT 0,
 						CONSTRAINT users_user_permission_chk
 							CHECK(REGEXP_LIKE(user_permissions,
 								'[0-5]{1}'))
@@ -401,9 +401,7 @@ CREATE TABLE payments
 						CONSTRAINT payments_payment_due_nn
 							NOT NULL,
 	payment_received    DATE DEFAULT NULL,
-	property_id     	NUMBER(11) 
-						CONSTRAINT payments_property_id_fk
-							REFERENCES properties(property_id)
+	property_id         VARCHAR2(18)
 						CONSTRAINT payments_property_id_nn
 							NOT NULL
 );
@@ -413,6 +411,11 @@ CREATE SEQUENCE seq_payment_id START WITH 1 INCREMENT BY 1;
 CREATE OR REPLACE TRIGGER trg_payments
 BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 	BEGIN 
+	/* If the default fails then set status to RECEIVED */
+	IF :NEW.payment_status IS NULL THEN
+		:NEW.payment_status := 'PENDING';
+	END IF;
+
 	IF INSERTING THEN
 		IF :NEW.payment_id IS NULL THEN
 			SELECT seq_payment_id.nextval
@@ -423,18 +426,6 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 			SELECT DBMS_RANDOM.STRING ('X', 16)
 			INTO :NEW.reference_id
 			FROM sys.dual;
-		END IF;
-		/* Handle the users payment status automatically on insert */
-		IF :NEW.payment_received != NULL THEN
-
-			:NEW.payment_received := SYSDATE;
-
-			IF:NEW.payment_received <= :NEW.payment_due THEN
-				:NEW.payment_status := 'PAID';
-			END IF;
-			IF:NEW.payment_received > :NEW.payment_due THEN
-				:NEW.payment_status := 'OVERDUE';
-			END IF;
 		END IF;
 	END IF;
 
@@ -447,95 +438,46 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 		END IF;
 	END IF;
 
-	/* ON UPDATE, INSERT OR DELETE append to the payment history */
-	INSERT INTO track_payments
-	(
-    	payment_history_id,
-		payment_id,
-		user_id,
-		reference_id,
-		payment_amount,
-		payment_status,
-		payment_due,
-		payment_received,
-		property_id
-	)
-	VALUES
-	(
-		'',
-		:OLD.payment_id,
-		:OLD.user_id,
-		:OLD.reference_id,
-		:OLD.payment_amount,
-		:OLD.payment_status,
-		:OLD.payment_due,
-		:OLD.payment_received,
-		:OLD.property_id
-	);
+	/* ON UPDATE OR DELETE append to the payment history */
+	IF UPDATING OR DELETING THEN
+		INSERT INTO track_payments
+		(
+	    	payment_history_id,
+			payment_id,
+			user_id,
+			reference_id,
+			payment_amount,
+			payment_status,
+			payment_due,
+			payment_received,
+			property_id
+		)
+		VALUES
+		(
+			'',
+			:OLD.payment_id,
+			:OLD.user_id,
+			:OLD.reference_id,
+			:OLD.payment_amount,
+			:OLD.payment_status,
+			:OLD.payment_due,
+			:OLD.payment_received,
+			:OLD.property_id
+		);
+	END IF;
 
-
-	/* Perform any formatting */
-	:NEW.payment_status := TRIM(UPPER(:NEW.payment_status));
-	:NEW.payment_amount := TRIM(:NEW.payment_amount);
-	:NEW.reference_id   := TRIM(:NEW.reference_id);
-
-END;
-
-/*******************************************
-*          PAYMENT TRACKING TABLE          *
-********************************************/
-CREATE TABLE track_payments 
-(
-	payment_history_id  NUMBER(11)
-						CONSTRAINT track_payments_pk
-							PRIMARY KEY,
-	payment_id 			NUMBER(11)
-						CONSTRAINT track_payments_id_fk
-							REFERENCES payments(payment_id)
-						CONSTRAINT track_payment_id_nn
-							NOT NULL,
-	user_id			    NUMBER(11)
-						CONSTRAINT track_user_id_nn
-							NOT NULL,
-	reference_id 		VARCHAR2(18)
-						CONSTRAINT track_ref_id_nn
-							NOT NULL,
-	payment_amount		VARCHAR2(15)
-						CONSTRAINT track_payment_amount_chk
-							CHECK(REGEXP_LIKE(payment_amount,
-								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'
-							))
-						CONSTRAINT track_payment_amount_nn
-							NOT NULL,
-	payment_status 		VARCHAR2(30) DEFAULT 'PENDING'
-						CONSTRAINT track_payment_status_chk
-							CHECK( UPPER(payment_status) = 'PENDING' OR 
-								   UPPER(payment_status) = 'OVERDUE' OR 
-								   UPPER(payment_status) = 'PAID' OR
-								   UPPER(payment_status) = 'PAID LATE'
-								 )
-						CONSTRAINT track_payment_status_nn
-							NOT NULL,
-	payment_due 		DATE
-						CONSTRAINT track_payment_due_nn
-							NOT NULL,
-	payment_received	DATE DEFAULT NULL,
-	property_id     	NUMBER(11) 
-						CONSTRAINT track_payments_property_id_nn
-							NOT NULL     
-);
-
-CREATE SEQUENCE seq_pay_track_id START WITH 1 INCREMENT BY 1;
-
-CREATE OR REPLACE TRIGGER trg_track_payments
-BEFORE INSERT OR UPDATE ON track_payments FOR EACH ROW
-	BEGIN
-	IF INSERTING THEN
-		IF :NEW.payment_id IS NULL THEN
-			SELECT seq_pay_track_id.nextval
-			INTO :NEW.payment_id
-			FROM sys.dual;
-		END IF;
+	/* Handle the users payment status automatically on insert */
+	-- Has the user paid on time?
+	IF:NEW.payment_received <= :NEW.payment_due THEN
+		:NEW.payment_status := 'PAID';
+	END IF;
+	-- Has the user paid late?
+	IF:NEW.payment_received > :NEW.payment_due THEN
+		:NEW.payment_status := 'PAID LATE';
+	END IF;
+	-- A future payment cannot of been received, set to current date
+	IF :NEW.payment_received > SYSDATE THEN 
+		:NEW.payment_received := SYSDATE;
 	END IF;
 
 	/* Perform any formatting */
@@ -549,18 +491,21 @@ END;
 ********************************************/
 CREATE TABLE requests
 (
-	requests_id		NUMBER(11)
+	requests_id			NUMBER(11)
 						CONSTRAINT requests_maintenance_id_pk
 							PRIMARY KEY
 						CONSTRAINT requests_maintenance_id_nn
 							NOT NULL,
-	tracking_id 		NUMBER(11)
+	tracking_id 		VARCHAR2(20)
 						CONSTRAINT requests_tracking_id_nn
 							NOT NULL,
 	user_id 			NUMBER(11)
 						CONSTRAINT requests_user_id_fk
 							REFERENCES users(user_id)
 						CONSTRAINT requests_user_id_nn
+							NOT NULL,
+	request_details		VARCHAR2(1500) 
+						CONSTRAINT request_details_nn
 							NOT NULL,
 	request_status		VARCHAR2(30) DEFAULT 'RECEIVED'
 						CONSTRAINT requests_req_status_chk
@@ -572,10 +517,8 @@ CREATE TABLE requests
 							)
 						CONSTRAINT requests_req_status_nn
 							NOT NULL,
-	request_log_date	DATE DEFAULT SYSDATE
-						CONSTRAINT requests_req_log_date_nn
-							NOT NULL,
-	request_fin_date	DATE DEFAULT NULL
+	request_log_date	DATE DEFAULT SYSDATE,
+	request_fin_date	DATE 
 );
 
 CREATE SEQUENCE seq_requests_id START WITH 1 INCREMENT BY 1;
@@ -612,8 +555,31 @@ BEFORE INSERT OR UPDATE ON requests FOR EACH ROW
 		END IF;
 	END IF;
 
-	:NEW.request_status := TRIM(UPPER(:NEW.request_status));
+	/* If the default fails then set status to RECEIVED */
+	IF :NEW.request_status IS NULL THEN
+		:NEW.request_status := 'RECEIVED';
+	END IF;
+
+	:NEW.request_status  := TRIM(UPPER(:NEW.request_status));
+	:NEW.request_details := TRIM(:NEW.request_details);
 END;
+
+/*******************************************
+*                FUNCTIONS                 *
+********************************************/
+CREATE OR REPLACE FUNCTION get_property( this_user NUMBER ) 
+	RETURN VARCHAR2 
+	AS curr_property properties.tracking_id%TYPE;
+BEGIN
+	SELECT tracking_id
+	INTO curr_property
+	FROM users
+	JOIN properties ON users.user_property = properties.property_id
+	WHERE users.user_id = this_user;
+
+	RETURN UPPER(curr_property);
+END get_property;
+
 
 
 
