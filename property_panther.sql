@@ -88,8 +88,8 @@ BEFORE INSERT OR UPDATE ON addresses FOR EACH ROW
 		END IF;
 	END IF;
 
-	:NEW.addr_line_1   :=  TRIM(UPPER(SUBSTR(:NEW.addr_line_1,1,1))||SUBSTR(:NEW.addr_line_1,2)) ||SUBSTR(:NEW.addr_line_1,3));
-	:NEW.addr_line_2   :=  TRIM(UPPER(SUBSTR(:NEW.addr_line_2,1,1))||SUBSTR(:NEW.addr_line_2,2)) ||SUBSTR(:NEW.addr_line_2,3));
+	:NEW.addr_line_1   :=  TRIM(UPPER(SUBSTR(:NEW.addr_line_1,1,1)||SUBSTR(:NEW.addr_line_1,2) ||SUBSTR(:NEW.addr_line_1,3)));
+	:NEW.addr_line_2   :=  TRIM(UPPER(SUBSTR(:NEW.addr_line_2,1,1)||SUBSTR(:NEW.addr_line_2,2) ||SUBSTR(:NEW.addr_line_2,3)));
 	:NEW.addr_postcode :=  replace(:NEW.addr_postcode, ' ', '');
 	:NEW.addr_postcode :=  TRIM(UPPER(:NEW.addr_postcode));
 END;
@@ -369,66 +369,6 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 END;
 
 /*******************************************
-*          PAYMENT TRACKING TABLE          *
-********************************************/
-CREATE TABLE track_payments 
-(
-	payment_id 			NUMBER(11)
-						CONSTRAINT track_payment_id_nn
-							NOT NULL,
-	user_id			    NUMBER(11)
-						CONSTRAINT track_user_id_nn
-							NOT NULL,
-	reference_id 		VARCHAR2(18)
-						CONSTRAINT track_ref_id_nn
-							NOT NULL,
-	payment_amount		VARCHAR2(15)
-						CONSTRAINT track_payment_amount_chk
-							CHECK(REGEXP_LIKE(payment_amount,
-								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'
-							))
-						CONSTRAINT track_payment_amount_nn
-							NOT NULL,
-	payment_status 		VARCHAR2(30) DEFAULT 'PENDING'
-						CONSTRAINT track_payment_status_chk
-							CHECK( UPPER(payment_status) = 'PENDING' OR 
-								   UPPER(payment_status) = 'OVERDUE' OR 
-								   UPPER(payment_status) = 'PAID' OR
-								   UPPER(payment_status) = 'PAID LATE'
-								 )
-						CONSTRAINT track_payment_status_nn
-							NOT NULL,
-	payment_due 		DATE
-						CONSTRAINT track_payment_due_nn
-							NOT NULL,
-	payment_received	DATE DEFAULT NULL,
-	property_id     	NUMBER(11) 
-						CONSTRAINT track_payments_property_id_fk
-							REFERENCES properties(property_id)
-						CONSTRAINT track_payments_property_id_nn
-							NOT NULL     
-);
-
-CREATE SEQUENCE seq_pay_track_id START WITH 1 INCREMENT BY 1;
-
-CREATE OR REPLACE TRIGGER trg_track_payments
-BEFORE INSERT OR UPDATE ON track_payments FOR EACH ROW
-	BEGIN
-	IF INSERTING THEN
-		IF :NEW.payment_id IS NULL THEN
-			SELECT seq_pay_track_id.nextval
-			INTO :NEW.payment_id
-			FROM sys.dual;
-		END IF;
-	END IF;
-
-	/* Perform any formatting */
-	:NEW.payment_status := TRIM(UPPER(:NEW.payment_status));
-	:NEW.payment_amount := TRIM(:NEW.payment_amount);
-	:NEW.reference_id   := TRIM(:NEW.reference_id);
-END;
-
-/*******************************************
 *              PAYMENTS TABLE              *
 ********************************************/
 CREATE TABLE payments
@@ -515,6 +455,7 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 	/* ON UPDATE, INSERT OR DELETE append to the payment history */
 	INSERT INTO track_payments
 	(
+    	payment_history_id,
 		payment_id,
 		user_id,
 		reference_id,
@@ -527,6 +468,7 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 	VALUES
 	(
 		'',
+		:OLD.payment_id,
 		:OLD.user_id,
 		:OLD.reference_id,
 		:OLD.payment_amount,
@@ -542,6 +484,69 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 	:NEW.payment_amount := TRIM(:NEW.payment_amount);
 	:NEW.reference_id   := TRIM(:NEW.reference_id);
 
+END;
+
+/*******************************************
+*          PAYMENT TRACKING TABLE          *
+********************************************/
+CREATE TABLE track_payments 
+(
+	payment_history_id  NUMBER(11)
+						CONSTRAINT track_payments_pk
+							PRIMARY KEY,
+	payment_id 			NUMBER(11)
+						CONSTRAINT track_payments_id_fk
+							REFERENCES payments(payment_id)
+						CONSTRAINT track_payment_id_nn
+							NOT NULL,
+	user_id			    NUMBER(11)
+						CONSTRAINT track_user_id_nn
+							NOT NULL,
+	reference_id 		VARCHAR2(18)
+						CONSTRAINT track_ref_id_nn
+							NOT NULL,
+	payment_amount		VARCHAR2(15)
+						CONSTRAINT track_payment_amount_chk
+							CHECK(REGEXP_LIKE(payment_amount,
+								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'
+							))
+						CONSTRAINT track_payment_amount_nn
+							NOT NULL,
+	payment_status 		VARCHAR2(30) DEFAULT 'PENDING'
+						CONSTRAINT track_payment_status_chk
+							CHECK( UPPER(payment_status) = 'PENDING' OR 
+								   UPPER(payment_status) = 'OVERDUE' OR 
+								   UPPER(payment_status) = 'PAID' OR
+								   UPPER(payment_status) = 'PAID LATE'
+								 )
+						CONSTRAINT track_payment_status_nn
+							NOT NULL,
+	payment_due 		DATE
+						CONSTRAINT track_payment_due_nn
+							NOT NULL,
+	payment_received	DATE DEFAULT NULL,
+	property_id     	NUMBER(11) 
+						CONSTRAINT track_payments_property_id_nn
+							NOT NULL     
+);
+
+CREATE SEQUENCE seq_pay_track_id START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER trg_track_payments
+BEFORE INSERT OR UPDATE ON track_payments FOR EACH ROW
+	BEGIN
+	IF INSERTING THEN
+		IF :NEW.payment_id IS NULL THEN
+			SELECT seq_pay_track_id.nextval
+			INTO :NEW.payment_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+
+	/* Perform any formatting */
+	:NEW.payment_status := TRIM(UPPER(:NEW.payment_status));
+	:NEW.payment_amount := TRIM(:NEW.payment_amount);
+	:NEW.reference_id   := TRIM(:NEW.reference_id);
 END;
 
 /*******************************************
