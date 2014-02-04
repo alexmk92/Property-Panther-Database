@@ -1,4 +1,4 @@
-## Property Panther 
+## Property Panther - Shared Utilities
 
 This repository contains all files which are shared between the Desktop and Android clients, thus you will find all middleware and database script files here.
 
