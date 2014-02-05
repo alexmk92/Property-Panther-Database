@@ -150,7 +150,7 @@ BEFORE INSERT OR UPDATE ON properties FOR EACH ROW
 	END IF;
 
 	-- Check whether the property has any available rooms
-	IF prop_vacancy_query(:NEW.tracking_id) = 0 THEN
+	IF prop_vacancy_query(:NEW.property_id) = 0 THEN
 	   :NEW.prop_status := 'FULL';
 	ELSE
 	   :NEW.prop_status := 'VACANT';
@@ -189,7 +189,7 @@ CREATE TABLE rooms
 	room_status			VARCHAR2(20) DEFAULT 'VACANT'
 						CONSTRAINT room_status_chk
 							CHECK( UPPER(prop_status) = 'VACANT' OR 
-								   UPPER(prop_status) = 'OVERDUE' 
+								   UPPER(prop_status) = 'OCCUPIED' 
 								 )
 						CONSTRAINT room_status_nn
 							NOT NULL,
@@ -216,6 +216,21 @@ BEFORE INSERT OR UPDATE ON rooms FOR EACH ROW
 		END IF;
 	END IF;
 
+	-- Handle the property status
+	IF :NEW.room_status = 'OCCUPIED' THEN
+		IF prop_vacancy_query(:NEW.property_id) = 0 THEN
+		   UPDATE properties
+		   SET prop_status = 'OCCUPIED'
+		   WHERE properties.property_id = :NEW.property_id;
+		ELSE
+		   UPDATE properties
+		   SET prop_status = 'VACANT'
+		   WHERE properties.property_id = :NEW.property_id;
+		END IF;
+	END IF;
+
+	-- Provide any formatting
+	:NEW.room_status  := TRIM(:NEW.room_status);
 	:NEW.room_details := TRIM(:NEW.room_details);
 	:NEW.room_price   := TRIM(:NEW.room_price);
 END;
@@ -584,11 +599,11 @@ END get_property;
 
 -- Check for room vacancies and dynamically set the status of house
 CREATE OR REPLACE FUNCTION prop_vacancy_query(
-    p_property_id       properties.tracking_id%TYPE
+    p_property_id       properties.property_id%TYPE
 )
   RETURN NUMBER
 IS
-  v_prop_rooms        properties.num_rooms%TYPE;
+  v_prop_rooms NUMBER;
   pragma autonomous_transaction;
 BEGIN
   SELECT COUNT(room_status) 
@@ -597,7 +612,7 @@ BEGIN
          JOIN properties ON
          properties.property_id = rooms.property_id
    WHERE room_status = 'VACANT'
-   AND properties.tracking_id = p_property_id;
+   AND properties.property_id = p_property_id;
   RETURN v_prop_rooms;
   COMMIT;
 END prop_vacancy_query;
