@@ -57,6 +57,7 @@ CREATE TABLE addresses
 								'[A-Za-z0-9]'))
 						CONSTRAINT addresses_addr_ln_1_nn
 							NOT NULL,
+							
 	addr_line_2			VARCHAR2(100)
 						CONSTRAINT addresses_addr_ln_2_chk
 							CHECK(REGEXP_LIKE(addr_line_2,
@@ -115,8 +116,12 @@ CREATE TABLE properties
 	prop_details		VARCHAR2(1500)
 						CONSTRAINT properties_prop_details_nn
 							NOT NULL,
-	num_rooms			NUMBER(11)
-						CONSTRAINT properties_num_rooms_nn
+	prop_status			VARCHAR2(20) DEFAULT 'VACANT'
+						CONSTRAINT properties_prop_status_chk
+							CHECK( UPPER(prop_status) = 'VACANT' OR 
+								   UPPER(prop_status) = 'FULL' 
+								 )
+						CONSTRAINT prop_status_nn
 							NOT NULL,
 	prop_price			VARCHAR2(12) DEFAULT '0.00'
 						CONSTRAINT properties_prop_price_chk
@@ -144,6 +149,15 @@ BEFORE INSERT OR UPDATE ON properties FOR EACH ROW
 		END IF;
 	END IF;
 
+	-- Check whether the property has any available rooms
+	IF prop_vacancy_query(:NEW.tracking_id) = 0 THEN
+	   :NEW.prop_status := 'FULL';
+	ELSE
+	   :NEW.prop_status := 'VACANT';
+	END IF;
+
+	-- Perform any formatting
+	:NEW.prop_status  := TRIM(:NEW.prop_status);
 	:NEW.prop_details := TRIM(:NEW.prop_details);
 	:NEW.tracking_id  := TRIM(:NEW.tracking_id);
 END;
@@ -171,6 +185,13 @@ CREATE TABLE rooms
 							CHECK(REGEXP_LIKE(room_price,
 								'([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'))
 						CONSTRAINT rooms_room_price_nn
+							NOT NULL,
+	room_status			VARCHAR2(20) DEFAULT 'VACANT'
+						CONSTRAINT room_status_chk
+							CHECK( UPPER(prop_status) = 'VACANT' OR 
+								   UPPER(prop_status) = 'OVERDUE' 
+								 )
+						CONSTRAINT room_status_nn
 							NOT NULL,
 	room_details		VARCHAR2(1500)
 						CONSTRAINT rooms_room_details_nn
@@ -561,6 +582,24 @@ BEGIN
 END get_property;
 
 
-
+-- Check for room vacancies and dynamically set the status of house
+CREATE OR REPLACE FUNCTION prop_vacancy_query(
+    p_property_id       properties.tracking_id%TYPE
+)
+  RETURN NUMBER
+IS
+  v_prop_rooms        properties.num_rooms%TYPE;
+  pragma autonomous_transaction;
+BEGIN
+  SELECT COUNT(room_status) 
+    INTO v_prop_rooms
+    FROM rooms 
+         JOIN properties ON
+         properties.property_id = rooms.property_id
+   WHERE room_status = 'VACANT'
+   AND properties.tracking_id = p_property_id;
+  RETURN v_prop_rooms;
+  COMMIT;
+END prop_vacancy_query;
 
 
