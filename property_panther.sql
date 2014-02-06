@@ -120,6 +120,9 @@ CREATE TABLE properties
 	prop_details		VARCHAR2(1500)
 						CONSTRAINT properties_prop_details_nn
 							NOT NULL,
+	prop_num_rooms		NUMBER(2) DEFAULT 1
+						CONSTRAINT properties_num_rooms_nn
+							NOT NULL,
 	prop_status			VARCHAR2(20) DEFAULT 'VACANT'
 						CONSTRAINT properties_prop_status_chk
 							CHECK( UPPER(prop_status) = 'VACANT' OR 
@@ -734,26 +737,7 @@ BEGIN
   COMMIT;
 END prop_vacancy_query;
 
--- Select the number of rooms
-CREATE OR REPLACE FUNCTION search_x_rooms(
-	p_property_id      properties.property_id%TYPE
-)
-	RETURN NUMBER
-IS
-	num_rooms NUMBER;
-	pragma autonomous_transaction;
-BEGIN
-	SELECT COUNT(property_id) 
-	INTO num_rooms FROM rooms
-		JOIN properties ON rooms.property_id = properties.property_id;
-	WHERE rooms.property_id = p_property_id;
-	RETURN num_rooms;
-END search_x_rooms;
 
 
-
-
-Messages TABLE
-Property Tracking Table
 
 
