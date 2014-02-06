@@ -46,21 +46,7 @@ WHERE properties.prop_price BETWEEN 200 AND 800;
 -- Insert a new room
 
 
+SELECT COUNT(*) FROM rooms WHERE property_id = 1
 
 
 
-TO DO : Refine address table to add a District column
-		Create hash map to hold 
-		Create common SQL query functions
-		Create a messages table that belongs to user (inbox table)
-
-
-
-[06/02/2014 12:41:34] Jamie Shepherd: Location search
-Property search
-Room count search
-Search by cost (between)
-New user insert
-User login (user+pass the same, 1 row)
-Insert a new property
-Return all payments by a user
