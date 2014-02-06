@@ -127,8 +127,6 @@ CREATE TABLE properties
 						CONSTRAINT properties_prop_price_chk
 							CHECK(REGEXP_LIKE(prop_price,
 								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'))
-						CONSTRAINT properties_prop_price_nn
-							NOT NULL
 );
 
 CREATE SEQUENCE seq_property_id START WITH 1 INCREMENT BY 1;
@@ -217,16 +215,14 @@ BEFORE INSERT OR UPDATE ON rooms FOR EACH ROW
 	END IF;
 
 	-- Handle the property status
-	IF :NEW.room_status = 'OCCUPIED' THEN
-		IF prop_vacancy_query(:NEW.property_id) = 0 THEN
-		   UPDATE properties
-		   SET prop_status = 'OCCUPIED'
-		   WHERE properties.property_id = :NEW.property_id;
-		ELSE
-		   UPDATE properties
-		   SET prop_status = 'VACANT'
-		   WHERE properties.property_id = :NEW.property_id;
-		END IF;
+	IF prop_vacancy_query(:NEW.property_id) = 0 THEN
+		UPDATE properties
+		SET prop_status = 'OCCUPIED'
+		WHERE properties.property_id = :NEW.property_id;
+	ELSE
+		UPDATE properties
+		SET prop_status = 'VACANT'
+		WHERE properties.property_id = :NEW.property_id;
 	END IF;
 
 	-- Provide any formatting
@@ -616,5 +612,21 @@ BEGIN
   RETURN v_prop_rooms;
   COMMIT;
 END prop_vacancy_query;
+
+-- Select the number of rooms
+CREATE OR REPLACE FUNCTION search_x_rooms(
+	p_property_id      properties.property_id%TYPE
+)
+	RETURN NUMBER
+IS
+	num_rooms NUMBER;
+	pragma autonomous_transaction;
+BEGIN
+	SELECT COUNT(property_id) 
+	INTO num_rooms FROM rooms
+		JOIN properties ON rooms.property_id = properties.property_id;
+	WHERE rooms.property_id = p_property_id;
+	RETURN num_rooms;
+END search_x_rooms;
 
 
