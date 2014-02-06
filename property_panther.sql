@@ -69,6 +69,9 @@ CREATE TABLE addresses
 							))
 						CONSTRAINT addresses_addr_post_nn
 							NOT NULL,
+	addr_district		VARCHAR2(50)
+						CONSTRAINT addresses_district_nn		
+							NOT NULL,
 	addr_city			NUMBER(11)
 						CONSTRAINT addresses_addr_city_fk
 							REFERENCES cities(city_id)
@@ -93,6 +96,7 @@ BEFORE INSERT OR UPDATE ON addresses FOR EACH ROW
 	:NEW.addr_line_2   :=  TRIM(UPPER(:NEW.addr_line_2));
 	:NEW.addr_postcode :=  replace(:NEW.addr_postcode, ' ', '');
 	:NEW.addr_postcode :=  TRIM(UPPER(:NEW.addr_postcode));
+	:NEW.addr_district :=  TRIM(UPPER(:NEW.addr_district));
 END;
 
 /*******************************************
@@ -333,9 +337,28 @@ CREATE TABLE users
 						CONSTRAINT users_user_pass_nn
 							NOT NULL,
 	pass_changed		NUMBER(1) DEFAULT 0,
-	user_home_addr		NUMBER(11)
-						CONSTRAINT users_user_addr_fk
-							REFERENCES addresses(addr_id),
+	addr_line_1			VARCHAR2(100)
+						CONSTRAINT users_addr_ln_1_chk
+							CHECK(REGEXP_LIKE(addr_line_1,
+								'[A-Za-z0-9]'))
+						CONSTRAINT users_addr_ln_1_nn
+							NOT NULL,
+	addr_line_2			VARCHAR2(100)
+						CONSTRAINT users_addr_ln_2_chk
+							CHECK(REGEXP_LIKE(addr_line_2,
+								'[A-Za-z0-9]')),
+	addr_postcode		VARCHAR2(12)
+						CONSTRAINT users_addr_post_chk
+							CHECK(REGEXP_LIKE(addr_postcode,
+								'(([A-PR-UW-Z]{1}[A-IK-Y]?)([0-9]?[A-HJKS-UW]?[ABEHMNPRVWXY]?|[0-9]?[0-9]?))\s?([0-9]{1}[ABD-HJLNP-UW-Z]{2})'
+							))
+						CONSTRAINT users_addr_post_nn
+							NOT NULL,
+	addr_city			NUMBER(11)
+						CONSTRAINT users_addr_city_fk
+							REFERENCES cities(city_id)
+						CONSTRAINT users_addr_city_nn
+							NOT NULL,
 	user_title			NUMBER(11) 
 						CONSTRAINT users_user_title_fk
 							REFERENCES titles(title_id)
@@ -393,6 +416,104 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 	:NEW.user_email    := TRIM(LOWER(:NEW.user_email));
 	:NEW.user_phone    := replace(:NEW.user_phone , ' ', '');
 	:NEW.user_pass     := replace(:NEW.user_pass , ' ', '');
+END;
+
+/*******************************************
+*                INBOX TABLE               *
+********************************************/
+CREATE TABLE inbox
+(
+	message_id			NUMBER(11)
+						CONSTRAINT inbox_message_id_pk
+							PRIMARY KEY
+						CONSTRAINT inbox_message_id_nn
+							NOT NULL,
+	message_to 			NUMBER(11)
+						CONSTRAINT inbox_message_to_fk
+							REFERENCES users(user_id)
+						CONSTRAINT inbox_message_to_nn
+							NOT NULL,
+	message_from 		NUMBER(11)
+						CONSTRAINT inbox_message_from_fk
+							REFERENCES users(user_id)
+						CONSTRAINT inbox_message_from_nn
+							NOT NULL,
+	message_type		VARCHAR2(150) DEFAULT 'GENERIC MESSAGE'
+						CONSTRAINT inbox_message_type_chk
+							CHECK
+							(	
+								UPPER(message_type) = 'GENERIC MESSAGE' OR
+								UPPER(message_type) = 'MAINTENANCE REQUEST' OR
+								UPPER(message_type) = 'VIEWING REQUEST'
+							));
+						CONSTRAINT inbox_message_type_nn
+							NOT NULL,
+	message_body		VARCHAR2(500)
+						CONSTRAINT inbox_message_body_nn
+							NOT NULL,
+	message_sent		DATETIME,
+	message_read		NUMBER(1) DEFAULT 0
+);
+
+CREATE SEQUENCE seq_inbox_id START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER trg_inbox
+BEFORE INSERT OR UPDATE ON inbox FOR EACH ROW
+	BEGIN 
+	IF INSERTING THEN
+		IF :NEW.message_id IS NULL THEN
+			SELECT seq_inbox_id.nextval
+			INTO :NEW.message_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+
+	-- Set the default value if the default fails
+	IF :NEW.message_read IS NULL THEN
+		:NEW.message_read := 0;
+	END IF;
+
+	/* Provide any formatting */
+	:NEW.message_type := TRIM(UPPER(:NEW.message_type));
+	:NEW.message_body := TRIM(:NEW.message_body);
+
+END;
+
+
+/*******************************************
+*          PROPERTY TRACKING TABLE         *
+********************************************/
+CREATE TABLE property_tracking
+(
+	prop_track_id		NUMBER(11)
+						CONSTRAINT prop_track_id_pk
+							PRIMARY KEY
+						CONSTRAINT prop_track_id_nn
+							NOT NULL,
+	property_id         NUMBER(11)
+						CONSTRAINT prop_property_id_fk
+							REFERENCES properties(property_id)
+						CONSTRAINT prop_property_id_nn
+							NOT NULL,
+	user_id 			NUMBER(11)
+						CONSTRAINT prop_track_user_id_fk
+							REFERENCES users(user_id)
+						CONSTRAINT prop_track_user_id_nn
+							NOT NULL
+);
+
+CREATE SEQUENCE seq_property_tracking_id START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER trg_prop_tracking
+BEFORE INSERT OR UPDATE ON property_tracking FOR EACH ROW
+	BEGIN 
+	IF INSERTING THEN
+		IF :NEW.prop_track_id IS NULL THEN
+			SELECT seq_property_tracking_id.nextval
+			INTO :NEW.prop_track_id
+			FROM sys.dual;
+		END IF;
+	END IF;
 END;
 
 /*******************************************
@@ -529,8 +650,8 @@ CREATE TABLE requests
 							)
 						CONSTRAINT requests_req_status_nn
 							NOT NULL,
-	request_log_date	DATE DEFAULT SYSDATE,
-	request_fin_date	DATE 
+	request_log_date	DATETIME DEFAULT SYSDATE,
+	request_fin_date	DATETIME 
 );
 
 CREATE SEQUENCE seq_requests_id START WITH 1 INCREMENT BY 1;
@@ -628,5 +749,11 @@ BEGIN
 	WHERE rooms.property_id = p_property_id;
 	RETURN num_rooms;
 END search_x_rooms;
+
+
+
+
+Messages TABLE
+Property Tracking Table
 
 
