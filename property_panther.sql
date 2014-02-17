@@ -390,7 +390,8 @@ CREATE TABLE users
 							REFERENCES properties(property_id),
 	user_prop_room		NUMBER(11) DEFAULT NULL
 						CONSTRAINT users_user_room_fk
-							REFERENCES rooms(room_id)
+							REFERENCES rooms(room_id),
+	user_notes			VARCHAR2(300)
 );
 
 CREATE SEQUENCE seq_user_id START WITH 1 INCREMENT BY 1;
