@@ -483,13 +483,13 @@ CREATE TABLE inbox
 							REFERENCES users(user_id)
 						CONSTRAINT inbox_message_from_nn
 							NOT NULL,
-	message_type		VARCHAR2(150) DEFAULT 'GENERIC MESSAGE'
+	message_type		VARCHAR2(150) DEFAULT 'INBOX'
 						CONSTRAINT inbox_message_type_chk
 							CHECK
 							(	
-								UPPER(message_type) = 'GENERIC MESSAGE' OR
-								UPPER(message_type) = 'MAINTENANCE REQUEST' OR
-								UPPER(message_type) = 'VIEWING REQUEST'
+								UPPER(message_type) = 'INBOX' OR
+								UPPER(message_type) = 'MAINTENANCE' OR
+								UPPER(message_type) = 'ALERT'
 							));
 						CONSTRAINT inbox_message_type_nn
 							NOT NULL,
@@ -511,6 +511,11 @@ BEFORE INSERT OR UPDATE ON inbox FOR EACH ROW
 			INTO :NEW.message_id
 			FROM sys.dual;
 		END IF;
+	END IF;
+
+	-- Set the sent date to SYSDATE
+	IF :NEW.message_sent IS NULL THEN
+		:NEW.message_sent := SYSDATE;
 	END IF;
 
 	-- Set the default value if the default fails
