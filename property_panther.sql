@@ -2,7 +2,7 @@
 *  	     Property Panther Database Code	   
 *	     Author:  PRCSE		    		   
 *        Date Created: 24/01/2014		   
-*        Version: 2.1					   
+*        Version: 2.5					   
 ********************************************/
 
 
@@ -24,7 +24,7 @@ CREATE TABLE cities
 							NOT NULL
 );
 
-CREATE SEQUENCE seq_city_id START WITH 1 INCREMENT BY 1
+CREATE SEQUENCE seq_city_id START WITH 1 INCREMENT BY 1;
 
 CREATE OR REPLACE TRIGGER trg_cities
 BEFORE INSERT OR UPDATE ON cities FOR EACH ROW
@@ -193,8 +193,8 @@ CREATE TABLE rooms
 							NOT NULL,
 	room_status			VARCHAR2(20) DEFAULT 'VACANT'
 						CONSTRAINT room_status_chk
-							CHECK( UPPER(prop_status) = 'VACANT' OR 
-								   UPPER(prop_status) = 'OCCUPIED' 
+							CHECK( UPPER(room_status) = 'VACANT' OR 
+								   UPPER(room_status) = 'OCCUPIED' 
 								 )
 						CONSTRAINT room_status_nn
 							NOT NULL,
@@ -255,16 +255,17 @@ CREATE TABLE gallery
 							NOT NULL,
 	room_id 			NUMBER(11)
 						CONSTRAINT gallery_room_id_fk
-							REFERENCES rooms(room_id)
-	img_type			VARCHAR2(20) DEFAULT 'GALLERY'
+							REFERENCES rooms(room_id),
+	room_name 			VARCHAR2(200),
+	img_type			VARCHAR2(20)  DEFAULT 'GALLERY'
+						CONSTRAINT gallery_img_type_nn
+							NOT NULL
 						CONSTRAINT gallery_img_type_chk
 							CHECK
 							(	
 								UPPER(img_type) = 'GALLERY' OR
 								UPPER(img_type) = 'COVER'
-							));
-						CONSTRAINT gallery_img_type_nn
-							NOT NULL,
+							),
 	img_path			VARCHAR2(200)
 );
 
@@ -281,8 +282,9 @@ BEFORE INSERT OR UPDATE ON gallery FOR EACH ROW
 		END IF;
 	END IF;
 
-	:NEW.img_type := TRIM(UPPER(:NEW.img_type));
-	:NEW.img_path := TRIM(LOWER(:NEW.img_path));
+	:NEW.img_type  := TRIM(UPPER(:NEW.img_type));
+	:NEW.img_path  := TRIM(LOWER(:NEW.img_path));
+	:NEW.room_name := TRIM(:NEW.room_name);
 END;
 
 /*******************************************
@@ -390,7 +392,8 @@ CREATE TABLE users
 							REFERENCES properties(property_id),
 	user_prop_room		NUMBER(11) DEFAULT NULL
 						CONSTRAINT users_user_room_fk
-							REFERENCES rooms(room_id)
+							REFERENCES rooms(room_id),
+	user_notes			VARCHAR2(300)
 );
 
 CREATE SEQUENCE seq_user_id START WITH 1 INCREMENT BY 1;
@@ -490,13 +493,13 @@ CREATE TABLE inbox
 								UPPER(message_type) = 'INBOX' OR
 								UPPER(message_type) = 'MAINTENANCE' OR
 								UPPER(message_type) = 'ALERT'
-							));
+							)
 						CONSTRAINT inbox_message_type_nn
 							NOT NULL,
 	message_body		VARCHAR2(500)
 						CONSTRAINT inbox_message_body_nn
 							NOT NULL,
-	message_sent		DATETIME,
+	message_sent		DATE,
 	message_read		NUMBER(1) DEFAULT 0
 );
 
@@ -526,6 +529,8 @@ BEFORE INSERT OR UPDATE ON inbox FOR EACH ROW
 	/* Provide any formatting */
 	:NEW.message_type := TRIM(UPPER(:NEW.message_type));
 	:NEW.message_body := TRIM(:NEW.message_body);
+	:NEW.message_from := TRIM(UPPER(:NEW.message_from));
+	:NEW.message_to   := TRIM(UPPER(:NEW.message_to));
 
 END;
 
@@ -700,8 +705,8 @@ CREATE TABLE requests
 							)
 						CONSTRAINT requests_req_status_nn
 							NOT NULL,
-	request_log_date	DATETIME DEFAULT SYSDATE,
-	request_fin_date	DATETIME 
+	request_log_date	DATE DEFAULT SYSDATE,
+	request_fin_date	DATE 
 );
 
 CREATE SEQUENCE seq_requests_id START WITH 1 INCREMENT BY 1;
@@ -761,7 +766,7 @@ BEGIN
 	WHERE users.user_id = this_user;
 
 	RETURN UPPER(curr_property);
-END get_property;
+END get_user_property;
 
 -- Get the property that the room belongs too
 CREATE OR REPLACE FUNCTION get_room_property( this_room NUMBER )
@@ -795,8 +800,3 @@ BEGIN
   RETURN v_prop_rooms;
   COMMIT;
 END prop_vacancy_query;
-
-
-
-
-
