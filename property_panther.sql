@@ -392,8 +392,7 @@ CREATE TABLE users
 							REFERENCES properties(property_id),
 	user_prop_room		NUMBER(11) DEFAULT NULL
 						CONSTRAINT users_user_room_fk
-							REFERENCES rooms(room_id),
-	user_notes			VARCHAR2(300)
+							REFERENCES rooms(room_id)
 );
 
 CREATE SEQUENCE seq_user_id START WITH 1 INCREMENT BY 1;
@@ -465,6 +464,50 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 	:NEW.user_pass     := replace(:NEW.user_pass , ' ', '');
 END;
 
+
+/*******************************************
+*                NOTES TABLE               *
+********************************************/
+CREATE TABLE notes
+(
+	note_id 			NUMBER(11)
+						CONSTRAINT notes_note_id_pk
+							PRIMARY KEY
+						CONSTRAINT notes_note_id_nn
+							NOT NULL,
+	user_id 			NUMBER(11)
+						CONSTRAINT notes_user_id_fk
+							REFERENCES users(user_id)
+						CONSTRAINT notes_user_id_nn
+							NOT NULL,
+	note_body			VARCHAR2(250)
+						CONSTRAINT notes_note_body_nn
+							NOT NULL,
+	note_date			DATE DEFAULT SYSDATE			
+);
+
+CREATE SEQUENCE seq_note_id START WITH 1 INCREMENT BY 1;
+
+CREATE OR REPLACE TRIGGER trg_notes
+BEFORE INSERT OR UPDATE ON notes FOR EACH ROW
+	BEGIN 
+	IF INSERTING THEN
+		IF :NEW.note_id IS NULL THEN
+			SELECT seq_note_id.nextval
+			INTO :NEW.note_id
+			FROM sys.dual;
+		END IF;
+	END IF;
+
+	-- if default fails
+	IF :NEW.note_date IS NULL THEN
+		:NEW.note_date := SYSDATE;
+    END IF;
+
+	/* Provide any formatting */
+	:NEW.note_body := TRIM(:NEW.note_body);
+
+END;
 
 /*******************************************
 *                INBOX TABLE               *
