@@ -2,7 +2,7 @@
 *  	     Property Panther Database Code	   
 *	     Author:  PRCSE		    		   
 *        Date Created: 24/01/2014		   
-*        Version: 2.1					   
+*        Version: 2.5					   
 ********************************************/
 
 
@@ -255,7 +255,9 @@ CREATE TABLE gallery
 							NOT NULL,
 	room_id 			NUMBER(11)
 						CONSTRAINT gallery_room_id_fk
-							REFERENCES rooms(room_id)
+							REFERENCES rooms(room_id),
+	room_name 			VARCHAR2(200) 
+							DEFAULT NULL,
 	img_type			VARCHAR2(20) DEFAULT 'GALLERY'
 						CONSTRAINT gallery_img_type_chk
 							CHECK
@@ -281,8 +283,9 @@ BEFORE INSERT OR UPDATE ON gallery FOR EACH ROW
 		END IF;
 	END IF;
 
-	:NEW.img_type := TRIM(UPPER(:NEW.img_type));
-	:NEW.img_path := TRIM(LOWER(:NEW.img_path));
+	:NEW.img_type  := TRIM(UPPER(:NEW.img_type));
+	:NEW.img_path  := TRIM(LOWER(:NEW.img_path));
+	:NEW.room_name := TRIM(:NEW.room_name);
 END;
 
 /*******************************************
