@@ -408,9 +408,9 @@ BEFORE INSERT OR UPDATE ON notes FOR EACH ROW
 END;
 
 /*******************************************
-*                INBOX TABLE               *
+*               MESSAGES TABLE             *
 ********************************************/
-CREATE TABLE inbox
+CREATE TABLE messages
 (
 	message_id			NUMBER(11)
 						CONSTRAINT inbox_message_id_pk
