@@ -2,102 +2,8 @@
 *  	     Property Panther Database Code	   
 *	     Author:  PRCSE		    		   
 *        Date Created: 24/01/2014		   
-*        Version: 2.5					   
+*        Version: 3.0			   
 ********************************************/
-
-
-/*******************************************
-*                CITIES TABLE              *
-********************************************/
-CREATE TABLE cities 
-(
-	city_id				NUMBER(11)
-						CONSTRAINT cities_city_id_pk
-							PRIMARY KEY
-						CONSTRAINT cities_city_id_nn
-							NOT NULL,
-	city_name			VARCHAR2(100)
-						CONSTRAINT cities_city_name_chk
-							CHECK(REGEXP_LIKE(city_name,
-								'[A-Za-z]{1,100}'))
-						CONSTRAINT cities_city_name_nn
-							NOT NULL
-);
-
-CREATE SEQUENCE seq_city_id START WITH 1 INCREMENT BY 1;
-
-CREATE OR REPLACE TRIGGER trg_cities
-BEFORE INSERT OR UPDATE ON cities FOR EACH ROW
-	BEGIN 
-	IF INSERTING THEN
-		IF :NEW.city_id IS NULL THEN
-			SELECT seq_city_id.nextval
-			INTO :NEW.city_id
-			FROM sys.dual;
-		END IF;
-	END IF;
-
-	:NEW.city_name := UPPER(SUBSTR(:NEW.city_name,1,1))||SUBSTR(:NEW.city_name,2);
-
-END;
-
-/*******************************************
-*              ADDRESSES TABLE             *
-********************************************/
-CREATE TABLE addresses 
-(
-	addr_id				NUMBER(11)
-						CONSTRAINT addresses_addr_id_pk
-							PRIMARY KEY
-						CONSTRAINT addresses_addr_id_nn
-							NOT NULL,
-	addr_line_1			VARCHAR2(100)
-						CONSTRAINT addresses_addr_ln_1_chk
-							CHECK(REGEXP_LIKE(addr_line_1,
-								'[A-Za-z0-9]'))
-						CONSTRAINT addresses_addr_ln_1_nn
-							NOT NULL,
-							
-	addr_line_2			VARCHAR2(100)
-						CONSTRAINT addresses_addr_ln_2_chk
-							CHECK(REGEXP_LIKE(addr_line_2,
-								'[A-Za-z0-9]')),
-	addr_postcode		VARCHAR2(12)
-						CONSTRAINT addresses_addr_post_chk
-							CHECK(REGEXP_LIKE(addr_postcode,
-								'(([A-PR-UW-Z]{1}[A-IK-Y]?)([0-9]?[A-HJKS-UW]?[ABEHMNPRVWXY]?|[0-9]?[0-9]?))\s?([0-9]{1}[ABD-HJLNP-UW-Z]{2})'
-							))
-						CONSTRAINT addresses_addr_post_nn
-							NOT NULL,
-	addr_district		VARCHAR2(50)
-						CONSTRAINT addresses_district_nn		
-							NOT NULL,
-	addr_city			NUMBER(11)
-						CONSTRAINT addresses_addr_city_fk
-							REFERENCES cities(city_id)
-						CONSTRAINT addresses_addr_city_nn
-							NOT NULL
-);
-
-CREATE SEQUENCE seq_addr_id START WITH 1 INCREMENT BY 1;
-
-CREATE OR REPLACE TRIGGER trg_addresses
-BEFORE INSERT OR UPDATE ON addresses FOR EACH ROW
-	BEGIN 
-	IF INSERTING THEN
-		IF :NEW.addr_id IS NULL THEN
-			SELECT seq_addr_id.nextval
-			INTO :NEW.addr_id
-			FROM sys.dual;
-		END IF;
-	END IF;
-
-	:NEW.addr_line_1   :=  TRIM(UPPER(:NEW.addr_line_1));
-	:NEW.addr_line_2   :=  TRIM(UPPER(:NEW.addr_line_2));
-	:NEW.addr_postcode :=  replace(:NEW.addr_postcode, ' ', '');
-	:NEW.addr_postcode :=  TRIM(UPPER(:NEW.addr_postcode));
-	:NEW.addr_district :=  TRIM(UPPER(:NEW.addr_district));
-END;
 
 /*******************************************
 *             PROPERTIES TABLE             *
@@ -109,13 +15,32 @@ CREATE TABLE properties
 							PRIMARY KEY
 						CONSTRAINT properties_prop_id_nn
 							NOT NULL,
-	tracking_id  		VARCHAR2(18)
+	prop_track_code  	VARCHAR2(10)
 						CONSTRAINT properties_tracking_id_nn
 							NOT NULL,
-	prop_addr			NUMBER(11)
-						CONSTRAINT properties_prop_addr_fk
-							REFERENCES addresses(addr_id)
-						CONSTRAINT properties_prop_addr_nn
+	addr_line_1			VARCHAR2(100)
+						CONSTRAINT users_addr_ln_1_chk
+							CHECK(REGEXP_LIKE(addr_line_1,
+								'[A-Za-z0-9]'))
+						CONSTRAINT users_addr_ln_1_nn
+							NOT NULL,
+	addr_line_2			VARCHAR2(100)
+						CONSTRAINT users_addr_ln_2_chk
+
+							CHECK(REGEXP_LIKE(addr_line_2,
+								'[A-Za-z0-9]')),
+	addr_postcode		VARCHAR2(12)
+						CONSTRAINT users_addr_post_chk
+							CHECK(REGEXP_LIKE(addr_postcode,
+								'(([A-PR-UW-Z]{1}[A-IK-Y]?)([0-9]?[A-HJKS-UW]?[ABEHMNPRVWXY]?|[0-9]?[0-9]?))\s?([0-9]{1}[ABD-HJLNP-UW-Z]{2})'
+							))
+						CONSTRAINT users_addr_post_nn
+							NOT NULL,
+	city_name			VARCHAR2(100)
+						CONSTRAINT cities_city_name_chk
+							CHECK(REGEXP_LIKE(city_name,
+								'[A-Za-z]{1,100}'))
+						CONSTRAINT cities_city_name_nn
 							NOT NULL,
 	prop_details		VARCHAR2(1500)
 						CONSTRAINT properties_prop_details_nn
@@ -129,11 +54,7 @@ CREATE TABLE properties
 								   UPPER(prop_status) = 'FULL' 
 								 )
 						CONSTRAINT prop_status_nn
-							NOT NULL,
-	prop_price			VARCHAR2(12) DEFAULT '0.00'
-						CONSTRAINT properties_prop_price_chk
-							CHECK(REGEXP_LIKE(prop_price,
-								'-?\+?([0-9]{0,10})(\.[0-9]{2})?$|^-?(100)(\.[0]{1,2})'))
+							NOT NULL
 );
 
 CREATE SEQUENCE seq_property_id START WITH 1 INCREMENT BY 1;
@@ -147,9 +68,9 @@ BEFORE INSERT OR UPDATE ON properties FOR EACH ROW
 			INTO :NEW.property_id
 			FROM sys.dual;
 		END IF;
-		IF :NEW.tracking_id IS NULL THEN
-		SELECT DBMS_RANDOM.STRING ('X', 16)
-		INTO :NEW.tracking_id
+		IF :NEW.prop_track_code IS NULL THEN
+		SELECT DBMS_RANDOM.STRING ('X', 8)
+		INTO :NEW.prop_track_code
 		FROM sys.dual;
 		END IF;
 	END IF;
@@ -162,9 +83,15 @@ BEFORE INSERT OR UPDATE ON properties FOR EACH ROW
 	END IF;
 
 	-- Perform any formatting
-	:NEW.prop_status  := TRIM(:NEW.prop_status);
-	:NEW.prop_details := TRIM(:NEW.prop_details);
-	:NEW.tracking_id  := TRIM(:NEW.tracking_id);
+	:NEW.prop_status     := TRIM(UPPER(:NEW.prop_status));
+	:NEW.prop_details    := TRIM(:NEW.prop_details);
+	:NEW.prop_track_code := TRIM(UPPER(:NEW.prop_track_code));
+	:NEW.addr_line_1     := TRIM(UPPER(:NEW.addr_line_1));
+	:NEW.addr_line_2     := TRIM(UPPER(:NEW.addr_line_2));
+	:NEW.addr_postcode   := replace(:NEW.addr_postcode, ' ', '');
+	:NEW.addr_postcode   := TRIM(UPPER(:NEW.addr_postcode));
+	:NEW.addr_district   := TRIM(UPPER(:NEW.addr_district));
+	:NEW.addr_city       := TRIM(UPPER(:NEW.addr_city));
 END;
 
 /*******************************************
@@ -176,9 +103,6 @@ CREATE TABLE rooms
 						CONSTRAINT rooms_room_id_pk
 							PRIMARY KEY
 						CONSTRAINT rooms_room_id_nn
-							NOT NULL,
-	tracking_id			VARCHAR2(18) 
-						CONSTRAINT rooms_tracking_id_nn
 							NOT NULL,
 	property_id     	NUMBER(11)
 						CONSTRAINT rooms_property_id_fk
@@ -214,11 +138,6 @@ BEFORE INSERT OR UPDATE ON rooms FOR EACH ROW
 			INTO :NEW.room_id
 			FROM sys.dual;
 		END IF;
-		IF :NEW.tracking_id IS NULL THEN
-			SELECT DBMS_RANDOM.STRING ('X', 16)
-			INTO :NEW.tracking_id
-			FROM sys.dual;
-		END IF;
 	END IF;
 
 	-- Handle the property status
@@ -233,7 +152,7 @@ BEFORE INSERT OR UPDATE ON rooms FOR EACH ROW
 	END IF;
 
 	-- Provide any formatting
-	:NEW.room_status  := TRIM(:NEW.room_status);
+	:NEW.room_status  := TRIM(UPPER(:NEW.room_status));
 	:NEW.room_details := TRIM(:NEW.room_details);
 	:NEW.room_price   := TRIM(:NEW.room_price);
 END;
@@ -288,41 +207,13 @@ BEFORE INSERT OR UPDATE ON gallery FOR EACH ROW
 END;
 
 /*******************************************
-*				 TITLES TABLE 		       *
-********************************************/
-CREATE TABLE titles
-(title_id 	NUMBER (11)
-	CONSTRAINT title_title_id_pk
- 		PRIMARY KEY
-	CONSTRAINT title_title_id_nn
-		NOT NULL,
- title_name	VARCHAR2 (8)
-	CONSTRAINT title_title_name_nn NOT NULL,
-	CONSTRAINT title_title_name_chk_init
-  		CHECK (title_name = INITCAP(title_name))
-);
-
-CREATE SEQUENCE seq_title_id START WITH 1 INCREMENT BY 1;
-
-CREATE OR REPLACE TRIGGER trg_titles
-    BEFORE INSERT OR UPDATE OR DELETE ON titles FOR EACH ROW
-    BEGIN
-    IF INSERTING THEN
-        IF :NEW.title_id IS NULL THEN
-            SELECT seq_title_id.nextval
-            INTO :NEW.title_id
-            FROM sys.dual;
-        END IF;
-    END IF;
-   
-    :NEW.title_name := INITCAP(:NEW.title_name);
-END;
-
-/*******************************************
 *                USERS TABLE               *
 ********************************************/
 CREATE TABLE users
 (
+	user_title			VARCHAR2 (12)
+					  	CONSTRAINT title_title_name_nn 
+							NOT NULL,
 	user_id 			NUMBER(11)
 						CONSTRAINT users_user_id_pk
 							PRIMARY KEY
@@ -359,10 +250,11 @@ CREATE TABLE users
 							))
 						CONSTRAINT users_addr_post_nn
 							NOT NULL,
-	addr_city			NUMBER(11)
-						CONSTRAINT users_addr_city_fk
-							REFERENCES cities(city_id)
-						CONSTRAINT users_addr_city_nn
+	city_name			VARCHAR2(100)
+						CONSTRAINT cities_city_name_chk
+							CHECK(REGEXP_LIKE(city_name,
+								'[A-Za-z]{1,100}'))
+						CONSTRAINT cities_city_name_nn
 							NOT NULL,
 	user_title			NUMBER(11) 
 						CONSTRAINT users_user_title_fk
@@ -457,11 +349,17 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 	END IF;
 
 	-- Provide any formatting 
+	:NEW.user_title    := TRIM(INITCAP(:NEW.user_title));
 	:NEW.user_forename := TRIM(INITCAP(:NEW.user_forename));
 	:NEW.user_surname  := TRIM(INITCAP(:NEW.user_surname));
 	:NEW.user_email    := TRIM(LOWER(:NEW.user_email));
 	:NEW.user_phone    := replace(:NEW.user_phone , ' ', '');
 	:NEW.user_pass     := replace(:NEW.user_pass , ' ', '');
+	:NEW.addr_line_1   := TRIM(UPPER(:NEW.addr_line_1));
+	:NEW.addr_line_2   := TRIM(UPPER(:NEW.addr_line_2));
+	:NEW.addr_postcode := replace(:NEW.addr_postcode, ' ', '');
+	:NEW.addr_postcode := TRIM(UPPER(:NEW.addr_postcode));
+	:NEW.addr_district := TRIM(UPPER(:NEW.addr_district));
 END;
 
 
@@ -583,14 +481,14 @@ END;
 ********************************************/
 CREATE TABLE property_tracking
 (
-	prop_track_id		NUMBER(11)
+	tracking_id 		NUMBER(11)
 						CONSTRAINT prop_track_id_pk
 							PRIMARY KEY
 						CONSTRAINT prop_track_id_nn
 							NOT NULL,
-	property_id         NUMBER(11)
+	prop_track_id       VARCHAR2(10)
 						CONSTRAINT prop_property_id_fk
-							REFERENCES properties(property_id)
+							REFERENCES properties(prop_track_code)
 						CONSTRAINT prop_property_id_nn
 							NOT NULL,
 	user_id 			NUMBER(11)
@@ -606,12 +504,15 @@ CREATE OR REPLACE TRIGGER trg_prop_tracking
 BEFORE INSERT OR UPDATE ON property_tracking FOR EACH ROW
 	BEGIN 
 	IF INSERTING THEN
-		IF :NEW.prop_track_id IS NULL THEN
+		IF :NEW.tracking_id IS NULL THEN
 			SELECT seq_property_tracking_id.nextval
-			INTO :NEW.prop_track_id
+			INTO :NEW.tracking_id
 			FROM sys.dual;
 		END IF;
 	END IF;
+
+	-- Provide any formatting
+	:NEW.prop_track_id := TRIM(UPPER(:NEW.prop_track_id));
 END;
 
 /*******************************************
@@ -629,7 +530,7 @@ CREATE TABLE payments
 							REFERENCES users(user_id)
 						CONSTRAINT payments_user_id_nn
 							NOT NULL,
-	reference_id 		VARCHAR2(18)
+	reference_id 		VARCHAR2(12)
 						CONSTRAINT payments_ref_id_nn
 							NOT NULL,
 	payment_amount		VARCHAR2(15)
@@ -674,7 +575,7 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 			FROM sys.dual;
 		END IF;
 		IF :NEW.reference_id IS NULL THEN
-			SELECT DBMS_RANDOM.STRING ('X', 16)
+			SELECT DBMS_RANDOM.STRING ('X', 8)
 			INTO :NEW.reference_id
 			FROM sys.dual;
 		END IF;
@@ -727,7 +628,7 @@ CREATE TABLE requests
 							PRIMARY KEY
 						CONSTRAINT requests_maintenance_id_nn
 							NOT NULL,
-	tracking_id 		VARCHAR2(20)
+	tracking_id 		VARCHAR2(10)
 						CONSTRAINT requests_tracking_id_nn
 							NOT NULL,
 	user_id 			NUMBER(11)
@@ -764,7 +665,7 @@ BEFORE INSERT OR UPDATE ON requests FOR EACH ROW
 			FROM sys.dual;
 		END IF;
 		IF :NEW.tracking_id IS NULL THEN
-			SELECT DBMS_RANDOM.STRING ('X', 16)
+			SELECT DBMS_RANDOM.STRING ('X', 8)
 			INTO :NEW.tracking_id
 			FROM sys.dual;
 		END IF;
@@ -800,9 +701,9 @@ END;
 ********************************************/
 CREATE OR REPLACE FUNCTION get_user_property( this_user NUMBER ) 
 	RETURN VARCHAR2 
-	AS curr_property properties.tracking_id%TYPE;
+	AS curr_property properties.prop_track_id%TYPE;
 BEGIN
-	SELECT tracking_id
+	SELECT prop_track_id
 	INTO curr_property
 	FROM users
 	JOIN properties ON users.user_property = properties.property_id
@@ -814,7 +715,7 @@ END get_user_property;
 -- Get the property that the room belongs too
 CREATE OR REPLACE FUNCTION get_room_property( this_room NUMBER )
 	RETURN NUMBER
-	AS curr_property properties.property_id%TYPE;
+	AS curr_property properties.prop_track_id%TYPE;
 BEGIN
 	SELECT property_id
 	INTO curr_property
