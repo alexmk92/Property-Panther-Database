@@ -36,6 +36,7 @@ CREATE TABLE properties
 							))
 						CONSTRAINT users_addr_post_nn
 							NOT NULL,
+	addr_district       VARCHAR2(100),
 	city_name			VARCHAR2(100)
 						CONSTRAINT cities_city_name_chk
 							CHECK(REGEXP_LIKE(city_name,
@@ -91,7 +92,7 @@ BEFORE INSERT OR UPDATE ON properties FOR EACH ROW
 	:NEW.addr_postcode   := replace(:NEW.addr_postcode, ' ', '');
 	:NEW.addr_postcode   := TRIM(UPPER(:NEW.addr_postcode));
 	:NEW.addr_district   := TRIM(UPPER(:NEW.addr_district));
-	:NEW.addr_city       := TRIM(UPPER(:NEW.addr_city));
+	:NEW.city_name       := TRIM(UPPER(:NEW.city_name));
 END;
 
 /*******************************************
@@ -211,9 +212,6 @@ END;
 ********************************************/
 CREATE TABLE users
 (
-	user_title			VARCHAR2 (12)
-					  	CONSTRAINT title_title_name_nn 
-							NOT NULL,
 	user_id 			NUMBER(11)
 						CONSTRAINT users_user_id_pk
 							PRIMARY KEY
@@ -234,32 +232,30 @@ CREATE TABLE users
 							NOT NULL,
 	pass_changed		NUMBER(1) DEFAULT 0,
 	addr_line_1			VARCHAR2(100)
-						CONSTRAINT users_addr_ln_1_chk
+						CONSTRAINT user_addr_ln_1_chk
 							CHECK(REGEXP_LIKE(addr_line_1,
 								'[A-Za-z0-9]'))
-						CONSTRAINT users_addr_ln_1_nn
+						CONSTRAINT user_addr_ln_1_nn
 							NOT NULL,
 	addr_line_2			VARCHAR2(100)
-						CONSTRAINT users_addr_ln_2_chk
+						CONSTRAINT user_addr_ln_2_chk
 							CHECK(REGEXP_LIKE(addr_line_2,
 								'[A-Za-z0-9]')),
 	addr_postcode		VARCHAR2(12)
-						CONSTRAINT users_addr_post_chk
+						CONSTRAINT user_addr_post_chk
 							CHECK(REGEXP_LIKE(addr_postcode,
 								'(([A-PR-UW-Z]{1}[A-IK-Y]?)([0-9]?[A-HJKS-UW]?[ABEHMNPRVWXY]?|[0-9]?[0-9]?))\s?([0-9]{1}[ABD-HJLNP-UW-Z]{2})'
 							))
-						CONSTRAINT users_addr_post_nn
+						CONSTRAINT user_addr_post_nn
 							NOT NULL,
 	city_name			VARCHAR2(100)
-						CONSTRAINT cities_city_name_chk
+						CONSTRAINT city_name_chk
 							CHECK(REGEXP_LIKE(city_name,
 								'[A-Za-z]{1,100}'))
-						CONSTRAINT cities_city_name_nn
+						CONSTRAINT city_name_nn
 							NOT NULL,
-	user_title			NUMBER(11) 
-						CONSTRAINT users_user_title_fk
-							REFERENCES titles(title_id)
-						CONSTRAINT users_user_title_nn
+	user_title			VARCHAR2 (12)
+					  	CONSTRAINT title_name_nn 
 							NOT NULL,
 	user_forename		VARCHAR2(50) DEFAULT 'NULL'
 						CONSTRAINT users_user_forename_chk
@@ -273,12 +269,12 @@ CREATE TABLE users
 						CONSTRAINT users_user_phone_chk
 							CHECK(REGEXP_LIKE(user_phone,
 								'[0-9]{5}\s?[0-9]{6}')),
-	user_permissions 	NUMBER(11) DEFAULT 0,
+	user_permissions 	NUMBER(11) DEFAULT 0
+						CONSTRAINT users_user_permission_nn
+							NOT NULL
 						CONSTRAINT users_user_permission_chk
 							CHECK(REGEXP_LIKE(user_permissions,
-								'[0-5]{1}'))
-						CONSTRAINT users_user_permission_nn
-							NOT NULL,
+								'[0-5]{1}')),
 	user_property		NUMBER(11) DEFAULT NULL
 						CONSTRAINT users_user_house_fk
 							REFERENCES properties(property_id),
@@ -359,7 +355,6 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 	:NEW.addr_line_2   := TRIM(UPPER(:NEW.addr_line_2));
 	:NEW.addr_postcode := replace(:NEW.addr_postcode, ' ', '');
 	:NEW.addr_postcode := TRIM(UPPER(:NEW.addr_postcode));
-	:NEW.addr_district := TRIM(UPPER(:NEW.addr_district));
 END;
 
 
@@ -446,8 +441,8 @@ CREATE TABLE messages
 
 CREATE SEQUENCE seq_inbox_id START WITH 1 INCREMENT BY 1;
 
-CREATE OR REPLACE TRIGGER trg_inbox
-BEFORE INSERT OR UPDATE ON inbox FOR EACH ROW
+CREATE OR REPLACE TRIGGER trg_messages
+BEFORE INSERT OR UPDATE ON messages FOR EACH ROW
 	BEGIN 
 	IF INSERTING THEN
 		IF :NEW.message_id IS NULL THEN
@@ -486,9 +481,9 @@ CREATE TABLE property_tracking
 							PRIMARY KEY
 						CONSTRAINT prop_track_id_nn
 							NOT NULL,
-	prop_track_id       VARCHAR2(10)
+	prop_track_id       NUMBER(11)
 						CONSTRAINT prop_property_id_fk
-							REFERENCES properties(prop_track_code)
+							REFERENCES properties(property_id)
 						CONSTRAINT prop_property_id_nn
 							NOT NULL,
 	user_id 			NUMBER(11)
@@ -510,9 +505,6 @@ BEFORE INSERT OR UPDATE ON property_tracking FOR EACH ROW
 			FROM sys.dual;
 		END IF;
 	END IF;
-
-	-- Provide any formatting
-	:NEW.prop_track_id := TRIM(UPPER(:NEW.prop_track_id));
 END;
 
 /*******************************************
@@ -701,9 +693,9 @@ END;
 ********************************************/
 CREATE OR REPLACE FUNCTION get_user_property( this_user NUMBER ) 
 	RETURN VARCHAR2 
-	AS curr_property properties.prop_track_id%TYPE;
+	AS curr_property properties.prop_track_code%TYPE;
 BEGIN
-	SELECT prop_track_id
+	SELECT prop_track_code
 	INTO curr_property
 	FROM users
 	JOIN properties ON users.user_property = properties.property_id
@@ -715,7 +707,7 @@ END get_user_property;
 -- Get the property that the room belongs too
 CREATE OR REPLACE FUNCTION get_room_property( this_room NUMBER )
 	RETURN NUMBER
-	AS curr_property properties.prop_track_id%TYPE;
+	AS curr_property properties.prop_track_code%TYPE;
 BEGIN
 	SELECT property_id
 	INTO curr_property
