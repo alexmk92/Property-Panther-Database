@@ -316,10 +316,10 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 		-- Set the users property equal to the room they have rented
 		:NEW.user_property := get_room_property(:NEW.user_prop_room);
 
-		-- Check if any rooms are left in room and update if necessary
+		-- Check if any rooms are left in property and update if necessary
 		IF prop_vacancy_query(:NEW.user_property) = 0 THEN
 			UPDATE properties
-			SET prop_status = 'OCCUPIED'
+			SET prop_status = 'FULL'
 			WHERE properties.property_id = :NEW.user_property;
 		ELSE
 			UPDATE properties
@@ -336,7 +336,7 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 		-- Check whether the property is vacant and update accordingly
 		IF prop_vacancy_query(:NEW.user_property) = 0 THEN
 			UPDATE properties
-			SET prop_status = 'OCCUPIED'
+			SET prop_status = 'FULL'
 			WHERE properties.property_id = :NEW.user_property;
 		ELSE
 			UPDATE properties
@@ -714,14 +714,14 @@ END get_user_property;
 -- Get the property that the room belongs too
 CREATE OR REPLACE FUNCTION get_room_property( this_room NUMBER )
 	RETURN NUMBER
-	AS curr_property properties.prop_track_code%TYPE;
+	AS curr_property properties.property_id%TYPE;
 BEGIN
-	SELECT property_id
+	SELECT rooms.property_id
 	INTO curr_property
 	FROM rooms
 	WHERE rooms.room_id = this_room;
 
-	RETURN this_room;
+	RETURN curr_property;
 END get_room_property;
 
 -- Check for room vacancies and dynamically set the status of house
