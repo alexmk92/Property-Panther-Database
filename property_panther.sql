@@ -269,12 +269,16 @@ CREATE TABLE users
 						CONSTRAINT users_user_phone_chk
 							CHECK(REGEXP_LIKE(user_phone,
 								'[0-9]{5}\s?[0-9]{6}')),
-	user_permissions 	NUMBER(11) DEFAULT 0
+	user_permissions 	VARCHAR2(15) DEFAULT "USER"
 						CONSTRAINT users_user_permission_nn
 							NOT NULL
 						CONSTRAINT users_user_permission_chk
-							CHECK(REGEXP_LIKE(user_permissions,
-								'[0-5]{1}')),
+							CHECK
+							(	
+								UPPER(user_permissions) = 'GUEST' OR
+								UPPER(user_permissions) = 'USER'  OR
+								UPPER(user_permissions) = 'ADMIN'
+							),
 	user_property		NUMBER(11) DEFAULT NULL
 						CONSTRAINT users_user_house_fk
 							REFERENCES properties(property_id),
@@ -343,6 +347,11 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 		-- The user no longer lives here, set to NULL.
 		:NEW.user_property := NULL;
 	END IF;
+
+	-- If the users Permissions are NULL then set a default value
+	IF :NEW.user_permissions IS NULL THEN
+		:NEW.user_permissions := 'USER';
+  	END IF;
 
 	-- Provide any formatting 
 	:NEW.user_title    := TRIM(INITCAP(:NEW.user_title));
@@ -419,9 +428,7 @@ CREATE TABLE messages
 							NOT NULL,
 	message_from 		NUMBER(11)
 						CONSTRAINT inbox_message_from_fk
-							REFERENCES users(user_id)
-						CONSTRAINT inbox_message_from_nn
-							NOT NULL,
+							REFERENCES users(user_id),
 	message_type		VARCHAR2(150) DEFAULT 'INBOX'
 						CONSTRAINT inbox_message_type_chk
 							CHECK
