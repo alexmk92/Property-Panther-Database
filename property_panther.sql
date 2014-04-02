@@ -669,20 +669,31 @@ BEFORE INSERT OR UPDATE ON requests FOR EACH ROW
 			FROM sys.dual;
 		END IF;
 
-		/* If a fin date is specified then set it */
+		-- If a fin date is specifeid then set it (unlogged requests can be logged later)
 		IF :NEW.request_status = 'COMPLETED' THEN
 			IF :NEW.request_fin_date >= :NEW.request_log_date THEN
 				:NEW.request_fin_date := :NEW.request_fin_date;
 			END IF;
 		END IF;
+
+		-- Sets the log date
+		IF :NEW.request_log_date IS NULL THEN 
+			:NEW.request_log_date := SYSDATE;
+		END IF;
 	END IF;
 
 	/* Update the fin date when job status is completed */
 	IF UPDATING THEN 
+		-- Set the date of completion ONLY when status is completed
 		IF :NEW.request_status = 'COMPLETED' THEN
 			IF SYSDATE >= :OLD.request_log_date THEN
 				:NEW.request_fin_date := SYSDATE;
 			END IF;
+		END IF;
+
+		-- A log date cannot be changed
+		IF :NEW.request_log_date IS NOT NULL THEN
+			:NEW.request_log_date := :OLD.request_log_date;
 		END IF;
 	END IF;
 
