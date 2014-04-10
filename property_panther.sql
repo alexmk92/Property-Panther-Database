@@ -236,7 +236,8 @@ CREATE TABLE users
 							REFERENCES properties(property_id),
 	user_prop_room		NUMBER(11) DEFAULT NULL
 						CONSTRAINT users_user_room_fk
-							REFERENCES rooms(room_id)
+							REFERENCES rooms(room_id),
+	session_key         VARCHAR(40)
 );
 
 CREATE SEQUENCE seq_user_id START WITH 1 INCREMENT BY 1;
@@ -516,7 +517,7 @@ CREATE TABLE payments
 	payment_due 		DATE
 						CONSTRAINT payments_payment_due_nn
 							NOT NULL,
-	payment_received    DATE DEFAULT NULL,
+	payment_received    DATE,
 	property_id         VARCHAR2(18)
 						CONSTRAINT payments_property_id_nn
 							NOT NULL
