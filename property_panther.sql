@@ -353,6 +353,11 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 		:NEW.user_permissions := 'USER';
   	END IF;
 
+  	-- Has the password been changed, if not set to 0
+  	IF :NEW.pass_changed IS NULL OR :NEW.pass_changed != 1 THEN
+		:NEW.pass_changed := 0;
+	END IF;
+
 	-- Provide any formatting 
 	:NEW.user_title    := TRIM(INITCAP(:NEW.user_title));
 	:NEW.user_forename := TRIM(INITCAP(:NEW.user_forename));
@@ -365,6 +370,16 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 	:NEW.addr_postcode := replace(:NEW.addr_postcode, ' ', '');
 	:NEW.addr_postcode := TRIM(UPPER(:NEW.addr_postcode));
 END;
+
+CREATE OR REPLACE TRIGGER trg_users_after
+AFTER INSERT OR UPDATE ON users FOR EACH ROW
+	BEGIN
+  	-- Alert a user that they need to change their password
+	IF :NEW.pass_changed = 0 THEN
+		send_alert(:NEW.user_id, 'Thank-you for registering, please change your password for security reasons!');
+	END IF;
+END;
+
 
 
 /*******************************************
@@ -754,3 +769,37 @@ BEGIN
   RETURN v_prop_rooms;
   COMMIT;
 END prop_vacancy_query;
+
+-- Sends an alert to the user noting that they haven't changed their password
+CREATE OR REPLACE PROCEDURE send_alert( 
+	this_user users.user_id%TYPE, 
+	this_message STRING 
+)
+	AS
+BEGIN
+	INSERT INTO messages 
+	VALUES('', this_user, getSystemId(), 'ALERT', this_message, '', '');
+END send_alert;
+
+-- Gets the ID of the SYSTEM user via its unique email
+CREATE OR REPLACE FUNCTION getSystemId 
+	RETURN NUMBER
+IS
+	system_user users.user_id%TYPE;
+	pragma autonomous_transaction;
+BEGIN 
+	SELECT user_id
+	INTO   system_user
+	FROM   users
+	WHERE  user_email = 'system@propertypanther.com'
+	AND    user_permissions = 'ADMIN';
+RETURN system_user;
+COMMIT;
+END getSystemId;
+
+
+
+
+-- SYSTEM USER SEED DATA
+------------------------
+-- INSERT INTO users VALUES('', 'system@propertypanther.com', 'a2e2e34323sd34ef3212', '', 'SYSTEM', 'SYSTEM', 'PL49JJ', 'SYSTEM', 'SYSTEM', 'SYSTEM', 'SYSTEM', '00000000000', 'ADMIN', '', '');   
