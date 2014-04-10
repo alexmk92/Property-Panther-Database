@@ -539,7 +539,7 @@ CREATE TABLE payments
 							))
 						CONSTRAINT payment_amount_nn
 							NOT NULL,
-	payment_status		VARCHAR(50) DEFAULT 'PENDING'
+	payment_status		VARCHAR(50) 
 						CONSTRAINT payments_pay_status_chk
 							CHECK( UPPER(payment_status) = 'PENDING' OR 
 								   UPPER(payment_status) = 'OVERDUE' OR 
@@ -599,11 +599,11 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 		:NEW.payment_status := 'PAID LATE';
 	END IF;
 	-- Is the payment pending?
-	IF SYSDATE < :NEW.payment_due AND :NEW.payment_received IS NULL THEN
+	IF :NEW.payment_due > SYSDATE AND :NEW.payment_received IS NULL THEN
 		:NEW.payment_status := 'PENDING';
 	END IF;
 	-- Is the payment overdue?
-	IF SYSDATE > :NEW.payment_due AND :NEW.payment_received IS NULL THEN
+	IF :NEW.payment_due < SYSDATE AND :NEW.payment_received IS NULL THEN
 		:NEW.payment_status := 'OVERDUE';
 	END IF;
 	-- A future payment cannot of been received, set to current date
