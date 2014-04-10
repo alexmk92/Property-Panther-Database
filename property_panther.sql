@@ -158,54 +158,6 @@ BEFORE INSERT OR UPDATE ON rooms FOR EACH ROW
 	:NEW.room_price   := TRIM(:NEW.room_price);
 END;
 
-/*******************************************
-*               GALLERY TABLE              *
-********************************************/
-CREATE TABLE gallery 
-(
-	img_id 				NUMBER(11)
-						CONSTRAINT gallery_img_id_pk
-							PRIMARY KEY
-						CONSTRAINT gallery_img_id_nn
-							NOT NULL,
-	property_id 		NUMBER(11)
-						CONSTRAINT gallery_property_id_fk
-							REFERENCES properties(property_id)
-						CONSTRAINT gallery_property_id_nn
-							NOT NULL,
-	room_id 			NUMBER(11)
-						CONSTRAINT gallery_room_id_fk
-							REFERENCES rooms(room_id),
-	room_name 			VARCHAR2(200),
-	img_type			VARCHAR2(20)  DEFAULT 'GALLERY'
-						CONSTRAINT gallery_img_type_nn
-							NOT NULL
-						CONSTRAINT gallery_img_type_chk
-							CHECK
-							(	
-								UPPER(img_type) = 'GALLERY' OR
-								UPPER(img_type) = 'COVER'
-							),
-	img_path			VARCHAR2(200)
-);
-
-CREATE SEQUENCE seq_img_id START WITH 1 INCREMENT BY 1;
-
-CREATE OR REPLACE TRIGGER trg_gallery
-BEFORE INSERT OR UPDATE ON gallery FOR EACH ROW
-	BEGIN 
-	IF INSERTING THEN
-		IF :NEW.img_id IS NULL THEN
-			SELECT seq_img_id.nextval
-			INTO :NEW.img_id
-			FROM sys.dual;
-		END IF;
-	END IF;
-
-	:NEW.img_type  := TRIM(UPPER(:NEW.img_type));
-	:NEW.img_path  := TRIM(LOWER(:NEW.img_path));
-	:NEW.room_name := TRIM(:NEW.room_name);
-END;
 
 /*******************************************
 *                USERS TABLE               *
@@ -376,7 +328,7 @@ AFTER INSERT OR UPDATE ON users FOR EACH ROW
 	BEGIN
   	-- Alert a user that they need to change their password
 	IF :NEW.pass_changed = 0 THEN
-		send_alert(:NEW.user_id, 'Thank-you for registering, please change your password for security reasons!');
+		send_message(:NEW.user_id, null, 'ALERT','Thank-you for registering, please change your password for security reasons!');
 	END IF;
 END;
 
@@ -438,9 +390,7 @@ CREATE TABLE messages
 							NOT NULL,
 	message_to 			NUMBER(11)
 						CONSTRAINT inbox_message_to_fk
-							REFERENCES users(user_id)
-						CONSTRAINT inbox_message_to_nn
-							NOT NULL,
+							REFERENCES users(user_id),
 	message_from 		NUMBER(11)
 						CONSTRAINT inbox_message_from_fk
 							REFERENCES users(user_id),
@@ -632,6 +582,20 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 	:NEW.reference_id   := TRIM(:NEW.reference_id);
 END;
 
+CREATE OR REPLACE TRIGGER trg_payments_after
+AFTER INSERT OR UPDATE ON payments FOR EACH ROW
+BEGIN
+	IF :NEW.payment_status = 'PAID' THEN 
+       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID'));
+    ELSIF :NEW.payment_status = 'PAID LATE' THEN 
+       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID LATE'));
+    ELSIF :NEW.payment_status = 'PENDING' THEN 
+       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PENDING'));
+    ELSIF :NEW.payment_status = 'OVERDUE' THEN 
+       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'OVERDUE'));
+	END IF;
+END;
+
 /*******************************************
 *        MAINTENANCE REQUEST TABLE         *
 ********************************************/
@@ -721,6 +685,22 @@ BEFORE INSERT OR UPDATE ON requests FOR EACH ROW
 	:NEW.request_details := TRIM(:NEW.request_details);
 END;
 
+CREATE OR REPLACE TRIGGER trg_requests_after
+AFTER INSERT OR UPDATE ON payments FOR EACH ROW
+BEGIN
+	IF :NEW.request_status = 'RECEIVED' THEN 
+       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'RECEIVED'));
+    ELSIF :NEW.payment_status = 'SEEN' THEN 
+       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'SEEN'));
+    ELSIF :NEW.payment_status = 'SCHEDULED' THEN 
+       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'SCHEDULED'));
+    ELSIF :NEW.payment_status = 'IN PROGRESS' THEN 
+       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'IN PROGRESS'));
+    ELSIF :NEW.payment_status = 'COMPLETED' THEN
+    	send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'COMPLETED'));
+	END IF;
+END;
+
 /*******************************************
 *                FUNCTIONS                 *
 ********************************************/
@@ -770,36 +750,63 @@ BEGIN
   COMMIT;
 END prop_vacancy_query;
 
--- Sends an alert to the user noting that they haven't changed their password
-CREATE OR REPLACE PROCEDURE send_alert( 
-	this_user users.user_id%TYPE, 
+-- SENDS A MESSAGE TO A USER UPON AN ACTION
+-- @param - the user who sent the message
+-- @param - the user who receives the message
+-- @param - the type of message : ALERT, MAINTENANCE, INBOX
+-- @param - message (the message)
+-- NOTE: If from_user is NULL then render it as SYSTEM on application
+CREATE OR REPLACE PROCEDURE send_message( 
+	to_user   users.user_id%TYPE, 
+	from_user users.user_id%TYPE,
+	msg_type  STRING,
 	this_message STRING 
 )
 	AS
 BEGIN
 	INSERT INTO messages 
-	VALUES('', this_user, getSystemId(), 'ALERT', this_message, '', '');
-END send_alert;
+	VALUES('', to_user, from_user, msg_type, this_message, '', '');
+END send_message;
 
--- Gets the ID of the SYSTEM user via its unique email
-CREATE OR REPLACE FUNCTION getSystemId 
-	RETURN NUMBER
+-- RETURNS THE MESSAGE FOR A USER
+-- @param - the user we want to get
+-- @param - the message type we will return : PAID, OVERDUE, PAID LATE...
+CREATE OR REPLACE FUNCTION getMessage(
+	this_user	users.user_id%TYPE,
+	status      STRING
+)
+	RETURN STRING
 IS
-	system_user users.user_id%TYPE;
+	this_message STRING(500);
+  user_name    STRING(50);
 	pragma autonomous_transaction;
 BEGIN 
-	SELECT user_id
-	INTO   system_user
-	FROM   users
-	WHERE  user_email = 'system@propertypanther.com'
-	AND    user_permissions = 'ADMIN';
-RETURN system_user;
-COMMIT;
-END getSystemId;
+	-- Populate the variable
+	SELECT user_forename
+	INTO   user_name
+	FROM   users 
+	WHERE  user_id = this_user;
 
+	-- Payment types
+	IF status = 'PAID' THEN
+		this_message := user_name || ' has paid their rent on time.';
+	ELSIF status = 'PAID LATE' THEN
+		this_message := user_name || ' has paid their rent late this month.';
+	ELSIF status = 'OVERDUE' THEN
+		this_message := user_name || ' has an outstanding payment.';
+	ELSIF status = 'PENDING' THEN
+		this_message := user_name || ' payment is pending for this month.';
 
+	-- Maintenance request types
+	ELSIF status = 'RECEIVED' THEN
+		this_message := 'Hello, ' || user_name || ' your maintenance request has been received as of ' || SYSDATE || '.';
+	ELSIF status = 'SCHEDULED' THEN
+		this_message := user_name || ' your request has been scheduled.';
+	ELSIF status = 'IN PROGRESS' THEN
+		this_message := user_name || ' your request is due to start today.';
+	ELSIF status = 'COMPLETED' THEN
+		this_message := user_name || ' your request has been completed, thank-you for your patience.';
+	END IF;
 
-
--- SYSTEM USER SEED DATA
-------------------------
--- INSERT INTO users VALUES('', 'system@propertypanther.com', 'a2e2e34323sd34ef3212', '', 'SYSTEM', 'SYSTEM', 'PL49JJ', 'SYSTEM', 'SYSTEM', 'SYSTEM', 'SYSTEM', '00000000000', 'ADMIN', '', '');   
+	RETURN this_message;
+END;
