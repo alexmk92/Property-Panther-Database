@@ -55,7 +55,8 @@ CREATE TABLE properties
 								   UPPER(prop_status) = 'FULL' 
 								 )
 						CONSTRAINT prop_status_nn
-							NOT NULL
+							NOT NULL,
+	google_map_code     VARCHAR2(512)
 );
 
 CREATE SEQUENCE seq_property_id START WITH 1 INCREMENT BY 1;
