@@ -585,6 +585,7 @@ END;
 CREATE OR REPLACE TRIGGER trg_payments_after
 AFTER INSERT OR UPDATE ON payments FOR EACH ROW
 BEGIN
+	-- SEND THE ALERT REQUEST TO THE MESSAGE TABLE
 	IF :NEW.payment_status = 'PAID' THEN 
        send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID'));
     ELSIF :NEW.payment_status = 'PAID LATE' THEN 
@@ -686,18 +687,18 @@ BEFORE INSERT OR UPDATE ON requests FOR EACH ROW
 END;
 
 CREATE OR REPLACE TRIGGER trg_requests_after
-AFTER INSERT OR UPDATE ON payments FOR EACH ROW
+AFTER INSERT OR UPDATE ON requests FOR EACH ROW
 BEGIN
 	IF :NEW.request_status = 'RECEIVED' THEN 
-       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'RECEIVED'));
-    ELSIF :NEW.payment_status = 'SEEN' THEN 
-       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'SEEN'));
-    ELSIF :NEW.payment_status = 'SCHEDULED' THEN 
-       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'SCHEDULED'));
-    ELSIF :NEW.payment_status = 'IN PROGRESS' THEN 
-       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'IN PROGRESS'));
-    ELSIF :NEW.payment_status = 'COMPLETED' THEN
-    	send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'COMPLETED'));
+       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'RECEIVED'));
+    ELSIF :NEW.request_status = 'SEEN' THEN 
+       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SEEN'));
+    ELSIF :NEW.request_status = 'SCHEDULED' THEN 
+       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SCHEDULED'));
+    ELSIF :NEW.request_status = 'IN PROGRESS' THEN 
+       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'IN PROGRESS'));
+    ELSIF :NEW.request_status = 'COMPLETED' THEN
+    	send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'COMPLETED'));
 	END IF;
 END;
 
