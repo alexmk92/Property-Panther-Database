@@ -222,7 +222,7 @@ CREATE TABLE users
 						CONSTRAINT users_user_phone_chk
 							CHECK(REGEXP_LIKE(user_phone,
 								'[0-9]{5}\s?[0-9]{6}')),
-	user_permissions 	VARCHAR2(15) DEFAULT "USER"
+	user_permissions 	VARCHAR2(15) DEFAULT 'USER'
 						CONSTRAINT users_user_permission_nn
 							NOT NULL
 						CONSTRAINT users_user_permission_chk
@@ -308,7 +308,7 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
   	END IF;
 
   	-- Has the password been changed, if not set to 0
-  	IF :NEW.pass_changed IS NULL OR :NEW.pass_changed != 1 THEN
+  	IF :NEW.pass_changed IS NULL OR :NEW.pass_changed > 2 THEN
 		:NEW.pass_changed := 0;
 	END IF;
 
@@ -330,7 +330,7 @@ AFTER INSERT OR UPDATE ON users FOR EACH ROW
 	BEGIN
   	-- Alert a user that they need to change their password
 	IF :NEW.pass_changed = 0 THEN
-		send_message(:NEW.user_id, null, 'ALERT','Thank-you for registering, please change your password for security reasons!');
+		send_message(:NEW.user_id, null, 'ALERT','Thank-you for registering, please change your password for security reasons!', null);
 	END IF;
 END;
 
@@ -410,7 +410,9 @@ CREATE TABLE messages
 						CONSTRAINT inbox_message_body_nn
 							NOT NULL,
 	message_sent		DATE,
-	message_read		NUMBER(1) DEFAULT 0
+	message_read		NUMBER(1) DEFAULT 0,
+	request_id          CONSTRAINT inbox_request_id_fk
+							REFERENCES requests(request_id)
 );
 
 CREATE SEQUENCE seq_inbox_id START WITH 1 INCREMENT BY 1;
@@ -587,15 +589,25 @@ END;
 CREATE OR REPLACE TRIGGER trg_payments_after
 AFTER INSERT OR UPDATE ON payments FOR EACH ROW
 BEGIN
-	-- SEND THE ALERT REQUEST TO THE MESSAGE TABLE
-	IF :NEW.payment_status = 'PAID' THEN 
-       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID'));
-    ELSIF :NEW.payment_status = 'PAID LATE' THEN 
-       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID LATE'));
-    ELSIF :NEW.payment_status = 'PENDING' THEN 
-       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PENDING'));
-    ELSIF :NEW.payment_status = 'OVERDUE' THEN 
-       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'OVERDUE'));
+	IF INSERTING THEN 
+		IF :NEW.payment_status = 'PAID' THEN 
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID'), NULL);
+	    ELSIF :NEW.payment_status = 'PAID LATE' THEN 
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID LATE'), NULL);
+	    END IF;
+	END IF;
+
+	IF UPDATING THEN 
+		-- SEND THE ALERT REQUEST TO THE MESSAGE TABLE
+		IF :NEW.payment_status = 'PAID' THEN 
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID'), NULL);
+	    ELSIF :NEW.payment_status = 'PAID LATE' THEN 
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID LATE'), NULL);
+	    ELSIF :NEW.payment_status = 'PENDING' THEN 
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PENDING'), NULL);
+	    ELSIF :NEW.payment_status = 'OVERDUE' THEN 
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'OVERDUE'), NULL);
+		END IF;
 	END IF;
 END;
 
@@ -691,16 +703,18 @@ END;
 CREATE OR REPLACE TRIGGER trg_requests_after
 AFTER INSERT OR UPDATE ON requests FOR EACH ROW
 BEGIN
-	IF :NEW.request_status = 'RECEIVED' THEN 
-       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'RECEIVED'));
-    ELSIF :NEW.request_status = 'SEEN' THEN 
-       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SEEN'));
-    ELSIF :NEW.request_status = 'SCHEDULED' THEN 
-       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SCHEDULED'));
-    ELSIF :NEW.request_status = 'IN PROGRESS' THEN 
-       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'IN PROGRESS'));
-    ELSIF :NEW.request_status = 'COMPLETED' THEN
-    	send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'COMPLETED'));
+	IF UPDATING THEN 
+		IF :NEW.request_status = 'RECEIVED' THEN 
+	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'RECEIVED'), :NEW.requests_id);
+	    ELSIF :NEW.request_status = 'SEEN' THEN 
+	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SEEN'), :NEW.requests_id);
+	    ELSIF :NEW.request_status = 'SCHEDULED' THEN 
+	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SCHEDULED'), :NEW.requests_id);
+	    ELSIF :NEW.request_status = 'IN PROGRESS' THEN 
+	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'IN PROGRESS'), :NEW.requests_id);
+	    ELSIF :NEW.request_status = 'COMPLETED' THEN
+	    	send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'COMPLETED'), :NEW.requests_id);
+		END IF;
 	END IF;
 END;
 
@@ -760,15 +774,16 @@ END prop_vacancy_query;
 -- @param - message (the message)
 -- NOTE: If from_user is NULL then render it as SYSTEM on application
 CREATE OR REPLACE PROCEDURE send_message( 
-	to_user   users.user_id%TYPE, 
-	from_user users.user_id%TYPE,
-	msg_type  STRING,
-	this_message STRING 
+	to_user      users.user_id%TYPE, 
+	from_user    users.user_id%TYPE,
+	msg_type     STRING,
+	this_message STRING,
+	request_id   requests.requests_id%TYPE
 )
 	AS
 BEGIN
 	INSERT INTO messages 
-	VALUES('', to_user, from_user, msg_type, this_message, '', '');
+	VALUES('', to_user, from_user, msg_type, this_message, '', '', request_id);
 END send_message;
 
 -- RETURNS THE MESSAGE FOR A USER
@@ -781,7 +796,7 @@ CREATE OR REPLACE FUNCTION getMessage(
 	RETURN STRING
 IS
 	this_message STRING(500);
-  user_name    STRING(50);
+    user_name    STRING(50);
 	pragma autonomous_transaction;
 BEGIN 
 	-- Populate the variable
@@ -802,7 +817,7 @@ BEGIN
 
 	-- Maintenance request types
 	ELSIF status = 'RECEIVED' THEN
-		this_message := 'Hello, ' || user_name || ' your maintenance request has been received as of ' || SYSDATE || '.';
+		this_message := user_name || ' logged a Maintenance request on ' || SYSDATE || ' current status: RECEIVED.';
 	ELSIF status = 'SCHEDULED' THEN
 		this_message := user_name || ' your request has been scheduled.';
 	ELSIF status = 'IN PROGRESS' THEN
@@ -813,3 +828,4 @@ BEGIN
 
 	RETURN this_message;
 END;
+
