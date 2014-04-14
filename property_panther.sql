@@ -56,7 +56,10 @@ CREATE TABLE properties
 								 )
 						CONSTRAINT prop_status_nn
 							NOT NULL,
-	google_map_code     VARCHAR2(512)
+	google_map_code     VARCHAR2(512),
+	date_added          DATE DEFAULT SYSDATE
+						CONSTRAINT properties_prop_added_nn
+							NOT NULL
 );
 
 CREATE SEQUENCE seq_property_id START WITH 1 INCREMENT BY 1;
@@ -82,6 +85,11 @@ BEFORE INSERT OR UPDATE ON properties FOR EACH ROW
 	   :NEW.prop_status := 'FULL';
 	ELSE
 	   :NEW.prop_status := 'VACANT';
+	END IF;
+
+	-- Set the date
+	IF :NEW.date_added IS NULL THEN
+		:NEW.date_added := SYSDATE;
 	END IF;
 
 	-- Perform any formatting
@@ -328,9 +336,12 @@ END;
 CREATE OR REPLACE TRIGGER trg_users_after
 AFTER INSERT OR UPDATE ON users FOR EACH ROW
 	BEGIN
-  	-- Alert a user that they need to change their password
-	IF :NEW.pass_changed = 0 THEN
-		send_message(:NEW.user_id, null, 'ALERT','Thank-you for registering, please change your password for security reasons!', null);
+
+	IF INSERTING THEN
+	  	-- Alert a user that they need to change their password
+		IF :NEW.pass_changed = 0 THEN
+			send_message(:NEW.user_id, null, 'ALERT','Thank-you for registering, please change your password for security reasons!', null, 0);
+		END IF;
 	END IF;
 END;
 
@@ -589,24 +600,32 @@ END;
 CREATE OR REPLACE TRIGGER trg_payments_after
 AFTER INSERT OR UPDATE ON payments FOR EACH ROW
 BEGIN
-	IF INSERTING THEN 
-		IF :NEW.payment_status = 'PAID' THEN 
-	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID'), NULL);
-	    ELSIF :NEW.payment_status = 'PAID LATE' THEN 
-	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID LATE'), NULL);
+	-- An inserted payment can only be pending
+	IF INSERTING THEN
+		-- SEND THE ALERT REQUEST TO THE MESSAGE TABLE
+		-------------------------------------------------------------------
+		-- Msg 1 - Targets the user who paid, message will show from system
+		-- Msg 2 - Targets an admin only, message will show from system
+		IF :NEW.payment_status = 'PENDING' THEN 
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, NULL, 'PENDING'), NULL, 0);
+	       send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' is due to pay £' || :NEW.payment_amount || ' on ' || :NEW.payment_due || '.', NULL, 0);
 	    END IF;
 	END IF;
 
-	IF UPDATING THEN 
+	IF UPDATING THEN
 		-- SEND THE ALERT REQUEST TO THE MESSAGE TABLE
-		IF :NEW.payment_status = 'PAID' THEN 
-	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID'), NULL);
+		-------------------------------------------------------------------
+		-- Msg 1 - Targets the user who paid, message will show from system
+		-- Msg 2 - Targets an admin only, message will show from system
+		IF :NEW.payment_status = 'PAID' THEN 		
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, NULL, 'PAID'), NULL, 0);                                          
+	       send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' has just made a payment of £' || :NEW.payment_amount || '.', NULL, 0);  
 	    ELSIF :NEW.payment_status = 'PAID LATE' THEN 
-	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID LATE'), NULL);
-	    ELSIF :NEW.payment_status = 'PENDING' THEN 
-	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PENDING'), NULL);
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, NULL, 'PAID LATE'), NULL, 0);
+	       send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' has just made a late payment of £' || :NEW.payment_amount || '.', NULL, 0);
 	    ELSIF :NEW.payment_status = 'OVERDUE' THEN 
-	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'OVERDUE'), NULL);
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, NULL, 'OVERDUE'), NULL, 0);
+	       send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' has an outstanding payment of £' || :NEW.payment_amount || ', this needs to be addressed.', NULL, 0);
 		END IF;
 	END IF;
 END;
@@ -643,7 +662,8 @@ CREATE TABLE requests
 						CONSTRAINT requests_req_status_nn
 							NOT NULL,
 	request_log_date	DATE DEFAULT SYSDATE,
-	request_fin_date	DATE 
+	request_fin_date	DATE,
+	updated_date        DATE DEFAULT NULL
 );
 
 CREATE SEQUENCE seq_requests_id START WITH 1 INCREMENT BY 1;
@@ -678,6 +698,11 @@ BEFORE INSERT OR UPDATE ON requests FOR EACH ROW
 
 	/* Update the fin date when job status is completed */
 	IF UPDATING THEN 
+	    -- Ensure the date is set to the last record update
+	    IF :NEW.updated_date < SYSDATE OR :NEW.updated_date IS NULL THEN
+	    	:NEW.updated_date := SYSDATE;
+	    END IF;
+
 		-- Set the date of completion ONLY when status is completed
 		IF :NEW.request_status = 'COMPLETED' THEN
 			IF SYSDATE >= :OLD.request_log_date THEN
@@ -688,6 +713,17 @@ BEFORE INSERT OR UPDATE ON requests FOR EACH ROW
 		-- A log date cannot be changed
 		IF :NEW.request_log_date IS NOT NULL THEN
 			:NEW.request_log_date := :OLD.request_log_date;
+		END IF;
+
+		-- Send a message
+		IF :NEW.request_status = 'SEEN' THEN 
+	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'SEEN'), :NEW.requests_id, 0);
+	    ELSIF :NEW.request_status = 'SCHEDULED' THEN 
+	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'SCHEDULED'), :NEW.requests_id, 0);
+	    ELSIF :NEW.request_status = 'IN PROGRESS' THEN 
+	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'IN PROGRESS'), :NEW.requests_id, 0);
+	    ELSIF :NEW.request_status = 'COMPLETED' THEN
+	    	send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'COMPLETED'), :NEW.requests_id, 0);
 		END IF;
 	END IF;
 
@@ -703,18 +739,8 @@ END;
 CREATE OR REPLACE TRIGGER trg_requests_after
 AFTER INSERT OR UPDATE ON requests FOR EACH ROW
 BEGIN
-	IF UPDATING THEN 
-		IF :NEW.request_status = 'RECEIVED' THEN 
-	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'RECEIVED'), :NEW.requests_id);
-	    ELSIF :NEW.request_status = 'SEEN' THEN 
-	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SEEN'), :NEW.requests_id);
-	    ELSIF :NEW.request_status = 'SCHEDULED' THEN 
-	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SCHEDULED'), :NEW.requests_id);
-	    ELSIF :NEW.request_status = 'IN PROGRESS' THEN 
-	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'IN PROGRESS'), :NEW.requests_id);
-	    ELSIF :NEW.request_status = 'COMPLETED' THEN
-	    	send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'COMPLETED'), :NEW.requests_id);
-		END IF;
+	IF :NEW.request_status = 'RECEIVED' THEN 
+	    send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, NULL, 'RECEIVED'), :NEW.requests_id, 1);
 	END IF;
 END;
 
@@ -772,60 +798,136 @@ END prop_vacancy_query;
 -- @param - the user who receives the message
 -- @param - the type of message : ALERT, MAINTENANCE, INBOX
 -- @param - message (the message)
+-- @param - the request_id passed, this can be nulled
+-- @param - has a new request been made or are we just updating an object
 -- NOTE: If from_user is NULL then render it as SYSTEM on application
 CREATE OR REPLACE PROCEDURE send_message( 
 	to_user      users.user_id%TYPE, 
 	from_user    users.user_id%TYPE,
 	msg_type     STRING,
 	this_message STRING,
-	request_id   requests.requests_id%TYPE
+	request_id   requests.requests_id%TYPE,
+	made_request NUMBER
 )
 	AS
+	user_name    STRING(50);
+    user_last    STRING(50);
 BEGIN
-	INSERT INTO messages 
-	VALUES('', to_user, from_user, msg_type, this_message, '', '', request_id);
+	IF to_user IS NOT NULL THEN
+	    -- Get the users name for the admin response
+		SELECT user_forename, user_surname
+		INTO   user_name, user_last
+		FROM   users
+		WHERE  user_id = to_user;
+	END IF;
+
+    -- Send the message to the user
+    IF to_user IS NOT NULL THEN
+		INSERT INTO messages 
+		VALUES('', to_user, from_user, msg_type, this_message, '', '', request_id);
+	END IF;
+
+    -- Send a message to the admin
+	IF request_id IS NOT NULL AND made_request = 1 THEN
+		INSERT INTO messages 
+		VALUES('', '', '', msg_type, user_name || ' ' || user_last || ' has just made a maintenance request.', '', '', request_id);
+	END IF;
+
+	-- Send a message to the admin noting that a payment has been made
+	IF to_user IS NULL AND from_user IS NULL THEN
+		INSERT INTO messages 
+		VALUES('', '', '', msg_type, this_message, '', '', request_id);
+	END IF;
 END send_message;
 
 -- RETURNS THE MESSAGE FOR A USER
--- @param - the user we want to get
--- @param - the message type we will return : PAID, OVERDUE, PAID LATE...
+-- @param  - the user we want to get
+-- @param  - the message type we will return : PAID, OVERDUE, PAID LATE...
+-- @pragma - uses an autonomous transaction to allow updating independent of the master transaction.
 CREATE OR REPLACE FUNCTION getMessage(
-	this_user	users.user_id%TYPE,
-	status      STRING
+	this_user	    users.user_id%TYPE,
+	this_request_id requests.requests_id%TYPE,
+	status          STRING
 )
 	RETURN STRING
 IS
-	this_message STRING(500);
-    user_name    STRING(50);
-	pragma autonomous_transaction;
+	this_message    STRING(500);
+    date_booked     DATE;
+    date_overdue    DATE;
+    paid            NUMBER;
+
+    pragma autonomous_transaction;
 BEGIN 
-	-- Populate the variable
-	SELECT user_forename
-	INTO   user_name
-	FROM   users 
-	WHERE  user_id = this_user;
+	-- Get the latest status date
+	IF this_request_id IS NOT NULL THEN 
+		SELECT updated_date
+		INTO   date_booked
+		FROM   requests
+		WHERE  requests_id = this_request_id;
+	END IF;
+
+	-- Get the payment due date
+	IF this_user IS NULL THEN 
+		SELECT payments.payment_due
+		INTO   date_overdue
+		FROM   payments
+		WHERE  payments.payment_status = 'OVERDUE' 
+		AND    payments.user_id = this_user
+		       FETCH FIRST ROW ONLY;
+
+		-- Get the payment amount
+		SELECT payments.payment_amount
+		INTO   paid
+		FROM   payments
+		WHERE  payments.user_id = this_user;
+	END IF;
 
 	-- Payment types
 	IF status = 'PAID' THEN
-		this_message := user_name || ' has paid their rent on time.';
+		this_message := 'Hello, ' || getName(this_user) || ' just a short message to notify you that we received your payment of £' || paid || ' on time - thank-you!.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'PAID LATE' THEN
-		this_message := user_name || ' has paid their rent late this month.';
+		this_message := 'Hello, ' || getName(this_user) || ' we have noticed that you paid your rent late this month, please ensure this does not become a habbit as we may have to start charging interest on late payments in future.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'OVERDUE' THEN
-		this_message := user_name || ' has an outstanding payment.';
+		this_message := 'Hello, ' || getName(this_user) || ' it has come to our attention that you have an outstanding payment from: ' || date_overdue || ', this needs to be paid within the next 7 working days or you risk incurring a fee of up to £500.00.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'PENDING' THEN
-		this_message := user_name || ' payment is pending for this month.';
+		this_message := 'Hello, ' || getName(this_user) || ' your contract is still rolling, here is a friendly message to notify you that you must pay this month!\n\nRegards,\nThe Property Panther team.';
 
 	-- Maintenance request types
 	ELSIF status = 'RECEIVED' THEN
-		this_message := user_name || ' logged a Maintenance request on ' || SYSDATE || ' current status: RECEIVED.';
-	ELSIF status = 'SCHEDULED' THEN
-		this_message := user_name || ' your request has been scheduled.';
+		this_message := 'Hello, ' || getName(this_user) || ' your maintenance request has been received as of ' || SYSDATE || ', please continue to watch this space as we process your request.\nCurrent Status: RECEIVED.\n\nRegards,\nThe Property Panther team.';
+	ELSIF status = 'SEEN' THEN 
+		this_message := 'Hello, ' || getName(this_user) || ' one of our agents has just viewed you request, we are now in the process of booking a time slot for you, you shall be notified on this update.\nCurrent Status: SEEN.\n\nRegards,\nThe Property Panther team.';
+	ELSIF status = 'SCHEDULED' THEN 
+		this_message := 'Hello, ' || getName(this_user) || ' we have scheduled your request for: ' || date_booked || ' if this is of any inconvenience please contact us immediately, any updates shall be forwarded to you.\nCurrent Status: SCHEDULED.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'IN PROGRESS' THEN
-		this_message := user_name || ' your request is due to start today.';
+		this_message := 'Hello, ' || getName(this_user) || ' an enginner has been sent out to your property to complete the outstanding task, we hope this resolves your problem.\nCurrent Status: IN PROGRESS.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'COMPLETED' THEN
-		this_message := user_name || ' your request has been completed, thank-you for your patience.';
+		this_message := 'Hello, ' || getName(this_user) || ' your request has been successfully completed today (' || SYSDATE || '), thank-you for your patience and co-operation.\nCurrent Status: COMPLETED.\n\nRegards,\nThe Property Panther team.';
 	END IF;
 
 	RETURN this_message;
+	COMMIT;
 END;
 
+-- RETURNS THE NAME OF A USER
+-- @param  - the users id, whose name we want to get
+-- @pragma - uses an autonomous transaction to allow updating independent of the master transaction.
+CREATE OR REPLACE FUNCTION getName(
+	this_user		users.user_id%TYPE
+)
+	RETURN STRING
+IS
+	this_forename	STRING(50);
+	this_surname 	STRING(50);
+	pragma autonomous_transaction;
+BEGIN
+	-- Populate the name variables
+	SELECT user_forename, user_surname
+	INTO   this_forename, this_surname
+	FROM   users 
+	WHERE  user_id = this_user;
+
+	-- Return the concatenated name
+	RETURN this_forename || ' ' || this_surname;
+	COMMIT;
+END getName;
