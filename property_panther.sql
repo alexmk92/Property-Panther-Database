@@ -606,7 +606,7 @@ BEGIN
 		-- Msg 1 - Targets the user who paid, message will show from system
 		-- Msg 2 - Targets an admin only, message will show from system
 		IF :NEW.payment_status = 'PENDING' THEN 
-	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, NULL, 'PENDING'), NULL, 0);
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PENDING'), NULL, 0);
 	       send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' is due to pay £' || :NEW.payment_amount || ' on ' || :NEW.payment_due || '.', NULL, 0);
 	    END IF;
 	END IF;
@@ -617,13 +617,13 @@ BEGIN
 		-- Msg 1 - Targets the user who paid, message will show from system
 		-- Msg 2 - Targets an admin only, message will show from system
 		IF :NEW.payment_status = 'PAID' THEN 		
-	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, NULL, 'PAID'), NULL, 0);                                          
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID'), NULL, 0);                                          
 	       send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' has just made a payment of £' || :NEW.payment_amount || '.', NULL, 0);  
 	    ELSIF :NEW.payment_status = 'PAID LATE' THEN 
-	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, NULL, 'PAID LATE'), NULL, 0);
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID LATE'), NULL, 0);
 	       send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' has just made a late payment of £' || :NEW.payment_amount || '.', NULL, 0);
 	    ELSIF :NEW.payment_status = 'OVERDUE' THEN 
-	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, NULL, 'OVERDUE'), NULL, 0);
+	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'OVERDUE'), NULL, 0);
 	       send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' has an outstanding payment of £' || :NEW.payment_amount || ', this needs to be addressed.', NULL, 0);
 		END IF;
 	END IF;
@@ -728,19 +728,19 @@ CREATE OR REPLACE TRIGGER trg_requests_after
 AFTER INSERT OR UPDATE ON requests FOR EACH ROW
 BEGIN
 	IF :NEW.request_status = 'RECEIVED' THEN 
-	    send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, NULL, 'RECEIVED'), :NEW.requests_id, 1);
+	    send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'RECEIVED'), :NEW.requests_id, 1);
 	END IF;
 
 	IF UPDATING THEN
 			-- Send a message
 		IF :NEW.request_status = 'SEEN' THEN 
-	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'SEEN'), :NEW.requests_id, 0);
+	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SEEN'), :NEW.requests_id, 0);
 	    ELSIF :NEW.request_status = 'SCHEDULED' THEN 
-	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'SCHEDULED'), :NEW.requests_id, 0);
+	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SCHEDULED'), :NEW.requests_id, 0);
 	    ELSIF :NEW.request_status = 'IN PROGRESS' THEN 
-	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'IN PROGRESS'), :NEW.requests_id, 0);
+	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'IN PROGRESS'), :NEW.requests_id, 0);
 	    ELSIF :NEW.request_status = 'COMPLETED' THEN
-	    	send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'COMPLETED'), :NEW.requests_id, 0);
+	    	send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'COMPLETED'), :NEW.requests_id, 0);
 		END IF;
 	END IF;
 END;
@@ -847,7 +847,6 @@ END send_message;
 -- @pragma - uses an autonomous transaction to allow updating independent of the master transaction.
 CREATE OR REPLACE FUNCTION getMessage(
 	this_user	    users.user_id%TYPE,
-	this_request_id requests.requests_id%TYPE,
 	status          STRING
 )
 	RETURN STRING
@@ -855,18 +854,7 @@ IS
 	this_message    STRING(500);
     date_booked     DATE;
     date_overdue    DATE;
-    paid            NUMBER;
-
-    pragma autonomous_transaction;
 BEGIN 
-	-- Get the latest status date
-	IF this_request_id IS NOT NULL THEN 
-		SELECT updated_date
-		INTO   date_booked
-		FROM   requests
-		WHERE  requests_id = this_request_id;
-	END IF;
-
 	-- Get the payment due date
 	IF this_user IS NULL THEN 
 		SELECT payments.payment_due
@@ -875,17 +863,11 @@ BEGIN
 		WHERE  payments.payment_status = 'OVERDUE' 
 		AND    payments.user_id = this_user
 		       FETCH FIRST ROW ONLY;
-
-		-- Get the payment amount
-		SELECT payments.payment_amount
-		INTO   paid
-		FROM   payments
-		WHERE  payments.user_id = this_user;
 	END IF;
 
 	-- Payment types
 	IF status = 'PAID' THEN
-		this_message := 'Hello, ' || getName(this_user) || ' just a short message to notify you that we received your payment of £' || paid || ' on time - thank-you!.\n\nRegards,\nThe Property Panther team.';
+		this_message := 'Hello, ' || getName(this_user) || ' just a short message to notify you that we received your payment on time - thank-you!.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'PAID LATE' THEN
 		this_message := 'Hello, ' || getName(this_user) || ' we have noticed that you paid your rent late this month, please ensure this does not become a habbit as we may have to start charging interest on late payments in future.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'OVERDUE' THEN
@@ -907,7 +889,6 @@ BEGIN
 	END IF;
 
 	RETURN this_message;
-	COMMIT;
 END;
 
 -- RETURNS THE NAME OF A USER
@@ -920,7 +901,6 @@ CREATE OR REPLACE FUNCTION getName(
 IS
 	this_forename	STRING(50);
 	this_surname 	STRING(50);
-	pragma autonomous_transaction;
 BEGIN
 	-- Populate the name variables
 	SELECT user_forename, user_surname
@@ -930,5 +910,4 @@ BEGIN
 
 	-- Return the concatenated name
 	RETURN this_forename || ' ' || this_surname;
-	COMMIT;
 END getName;
