@@ -336,7 +336,6 @@ END;
 CREATE OR REPLACE TRIGGER trg_users_after
 AFTER INSERT OR UPDATE ON users FOR EACH ROW
 	BEGIN
-
 	IF INSERTING THEN
 	  	-- Alert a user that they need to change their password
 		IF :NEW.pass_changed = 0 THEN
@@ -714,17 +713,6 @@ BEFORE INSERT OR UPDATE ON requests FOR EACH ROW
 		IF :NEW.request_log_date IS NOT NULL THEN
 			:NEW.request_log_date := :OLD.request_log_date;
 		END IF;
-
-		-- Send a message
-		IF :NEW.request_status = 'SEEN' THEN 
-	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'SEEN'), :NEW.requests_id, 0);
-	    ELSIF :NEW.request_status = 'SCHEDULED' THEN 
-	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'SCHEDULED'), :NEW.requests_id, 0);
-	    ELSIF :NEW.request_status = 'IN PROGRESS' THEN 
-	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'IN PROGRESS'), :NEW.requests_id, 0);
-	    ELSIF :NEW.request_status = 'COMPLETED' THEN
-	    	send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'COMPLETED'), :NEW.requests_id, 0);
-		END IF;
 	END IF;
 
 	/* If the default fails then set status to RECEIVED */
@@ -741,6 +729,19 @@ AFTER INSERT OR UPDATE ON requests FOR EACH ROW
 BEGIN
 	IF :NEW.request_status = 'RECEIVED' THEN 
 	    send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, NULL, 'RECEIVED'), :NEW.requests_id, 1);
+	END IF;
+
+	IF UPDATING THEN
+			-- Send a message
+		IF :NEW.request_status = 'SEEN' THEN 
+	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'SEEN'), :NEW.requests_id, 0);
+	    ELSIF :NEW.request_status = 'SCHEDULED' THEN 
+	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'SCHEDULED'), :NEW.requests_id, 0);
+	    ELSIF :NEW.request_status = 'IN PROGRESS' THEN 
+	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'IN PROGRESS'), :NEW.requests_id, 0);
+	    ELSIF :NEW.request_status = 'COMPLETED' THEN
+	    	send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, :NEW.requests_id, 'COMPLETED'), :NEW.requests_id, 0);
+		END IF;
 	END IF;
 END;
 
@@ -898,7 +899,7 @@ BEGIN
 	ELSIF status = 'SEEN' THEN 
 		this_message := 'Hello, ' || getName(this_user) || ' one of our agents has just viewed you request, we are now in the process of booking a time slot for you, you shall be notified on this update.\nCurrent Status: SEEN.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'SCHEDULED' THEN 
-		this_message := 'Hello, ' || getName(this_user) || ' we have scheduled your request for: ' || date_booked || ' if this is of any inconvenience please contact us immediately, any updates shall be forwarded to you.\nCurrent Status: SCHEDULED.\n\nRegards,\nThe Property Panther team.';
+		this_message := 'Hello, ' || getName(this_user) || ' we have scheduled your request for: ' || SYSDATE || ' if this is of any inconvenience please contact us immediately, any updates shall be forwarded to you.\nCurrent Status: SCHEDULED.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'IN PROGRESS' THEN
 		this_message := 'Hello, ' || getName(this_user) || ' an enginner has been sent out to your property to complete the outstanding task, we hope this resolves your problem.\nCurrent Status: IN PROGRESS.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'COMPLETED' THEN
