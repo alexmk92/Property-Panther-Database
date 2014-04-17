@@ -73,18 +73,12 @@ BEFORE INSERT OR UPDATE ON properties FOR EACH ROW
 			INTO :NEW.property_id
 			FROM sys.dual;
 		END IF;
-		IF :NEW.prop_track_code IS NULL THEN
-		SELECT DBMS_RANDOM.STRING ('X', 8)
-		INTO :NEW.prop_track_code
-		FROM sys.dual;
-		END IF;
-	END IF;
 
-	-- Check whether the property has any available rooms
-	IF prop_vacancy_query(:NEW.property_id) = 0 THEN
-	   :NEW.prop_status := 'FULL';
-	ELSE
-	   :NEW.prop_status := 'VACANT';
+		IF :NEW.prop_track_code IS NULL THEN
+			SELECT DBMS_RANDOM.STRING ('X', 8)
+			INTO :NEW.prop_track_code
+			FROM sys.dual;
+		END IF;
 	END IF;
 
 	-- Set the date
@@ -103,6 +97,7 @@ BEFORE INSERT OR UPDATE ON properties FOR EACH ROW
 	:NEW.addr_district   := TRIM(UPPER(:NEW.addr_district));
 	:NEW.city_name       := TRIM(UPPER(:NEW.city_name));
 END;
+
 
 /*******************************************
 *               ROOMS TABLE                *
@@ -150,21 +145,25 @@ BEFORE INSERT OR UPDATE ON rooms FOR EACH ROW
 		END IF;
 	END IF;
 
-	-- Handle the property status
-	IF prop_vacancy_query(:NEW.property_id) = 0 THEN
-		UPDATE properties
-		SET prop_status = 'OCCUPIED'
-		WHERE properties.property_id = :NEW.property_id;
-	ELSE
-		UPDATE properties
-		SET prop_status = 'VACANT'
-		WHERE properties.property_id = :NEW.property_id;
-	END IF;
-
 	-- Provide any formatting
 	:NEW.room_status  := TRIM(UPPER(:NEW.room_status));
 	:NEW.room_details := TRIM(:NEW.room_details);
 	:NEW.room_price   := TRIM(:NEW.room_price);
+END;
+
+CREATE OR REPLACE TRIGGER trg_rooms_after
+AFTER UPDATE ON rooms
+BEGIN
+	-- Update the table based on the result
+	IF prop_vacancy_query(:NEW.property_id) = 0 THEN
+		UPDATE properties
+		SET prop_status = 'VACANT'
+		WHERE properties.property_id = :NEW.property_id;
+	ELSE
+		UPDATE properties
+		SET prop_status = 'FULL'
+		WHERE properties.property_id = :NEW.property_id;
+	END IF;
 END;
 
 
@@ -185,10 +184,6 @@ CREATE TABLE users
 						CONSTRAINT users_user_email_nn
 							NOT NULL,   
 	user_pass			VARCHAR2(150)
-						CONSTRAINT users_user_pass_chk
-							CHECK(REGEXP_LIKE(user_pass,
-								/* Check for a password 6-40 chars with any char or symbol */
-								'([^\.].{6,64})'))
 						CONSTRAINT users_user_pass_nn
 							NOT NULL,
 	pass_changed		NUMBER(1) DEFAULT 0,
@@ -260,6 +255,13 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 			INTO :NEW.user_id
 			FROM sys.dual;
 		END IF;
+
+		-- First sign up will give a random password to the user
+		IF :NEW.user_pass IS NULL THEN
+			SELECT DBMS_RANDOM.STRING ('X', 6)
+			INTO :NEW.user_pass
+			FROM sys.dual;
+		END IF;
 	END IF;
 
 	IF UPDATING THEN
@@ -267,47 +269,6 @@ BEFORE INSERT OR UPDATE ON users FOR EACH ROW
 		IF :NEW.user_pass != :OLD.user_pass THEN
 			:NEW.pass_changed := 1;
 		END IF;
-	END IF;
-
-	-- Update the user rooms table
-	IF :NEW.user_prop_room IS NOT NULL THEN
-		UPDATE rooms
-		SET rooms.room_status = 'OCCUPIED'
-		WHERE rooms.room_id = :NEW.user_prop_room;
-
-		-- Set the users property equal to the room they have rented
-		:NEW.user_property := get_room_property(:NEW.user_prop_room);
-
-		-- Check if any rooms are left in property and update if necessary
-		IF prop_vacancy_query(:NEW.user_property) = 0 THEN
-			UPDATE properties
-			SET prop_status = 'FULL'
-			WHERE properties.property_id = :NEW.user_property;
-		ELSE
-			UPDATE properties
-			SET prop_status = 'VACANT'
-			WHERE properties.property_id = :NEW.user_property;
-		END IF;
-
-	-- If Null, the user has moved out, set vacancy accordingly
-	ELSIF :NEW.user_prop_room IS NULL THEN
-		UPDATE rooms
-		SET rooms.room_status = 'VACANT'
-		WHERE rooms.room_id = :OLD.user_prop_room;
-
-		-- Check whether the property is vacant and update accordingly
-		IF prop_vacancy_query(:NEW.user_property) = 0 THEN
-			UPDATE properties
-			SET prop_status = 'FULL'
-			WHERE properties.property_id = :NEW.user_property;
-		ELSE
-			UPDATE properties
-			SET prop_status = 'VACANT'
-			WHERE properties.property_id = :NEW.user_property;
-		END IF;
-
-		-- The user no longer lives here, set to NULL.
-		:NEW.user_property := NULL;
 	END IF;
 
 	-- If the users Permissions are NULL then set a default value
@@ -339,7 +300,56 @@ AFTER INSERT OR UPDATE ON users FOR EACH ROW
 	IF INSERTING THEN
 	  	-- Alert a user that they need to change their password
 		IF :NEW.pass_changed = 0 THEN
-			send_message(:NEW.user_id, null, 'ALERT','Thank-you for registering, please change your password for security reasons!', null, 0);
+			send_message(:NEW.user_id, null, 'ALERT','Hello, ' || :NEW.user_forename || ' ' || :NEW.user_surname || 
+				         ', and thank-you for register with property panther!  Please login with the username: ' || 
+				         :NEW.user_email || ' and the password: ' || :NEW.user_pass || ', it is important you change this temporary password for security reasons!', null, 0);
+		END IF;
+	END IF;
+
+	IF UPDATING THEN 
+		-- Update the user rooms table
+		IF :NEW.user_prop_room IS NOT NULL THEN
+			UPDATE rooms
+			SET rooms.room_status = 'OCCUPIED'
+			WHERE rooms.room_id = :NEW.user_prop_room;
+
+			-- Set the users property equal to the room they have rented
+			-- UPDATE users SET user_property = get_room_property(:NEW.user_prop_room);
+
+			-- Check if any rooms are left in property and update if necessary
+			IF prop_vacancy_query(:NEW.user_property) = 0 THEN
+				UPDATE properties
+				SET prop_status = 'FULL'
+				WHERE properties.property_id = :NEW.user_property;
+			ELSE
+				UPDATE properties
+				SET prop_status = 'VACANT'
+				WHERE properties.property_id = :NEW.user_property;
+			END IF;
+
+		-- If Null, the user has moved out, set vacancy accordingly
+		ELSIF :NEW.user_prop_room IS NULL THEN
+			
+			-- Check they lived at a property before, else do nothing
+			IF :OLD.user_prop_room IS NOT NULL THEN 
+				UPDATE rooms
+				SET rooms.room_status = 'VACANT'
+				WHERE rooms.room_id = :OLD.user_prop_room;
+			END IF;
+
+			-- Check whether the property is vacant and update accordingly
+			IF prop_vacancy_query(:NEW.user_property) = 0 THEN
+				UPDATE properties
+				SET prop_status = 'FULL'
+				WHERE properties.property_id = :NEW.user_property;
+			ELSE
+				UPDATE properties
+				SET prop_status = 'VACANT'
+				WHERE properties.property_id = :NEW.user_property;
+			END IF;
+
+			-- The user no longer lives here, set to NULL.
+			-- UPDATE users SET users.user_property = NULL WHERE users.user_id = :NEW.user_id;
 		END IF;
 	END IF;
 END;
@@ -776,22 +786,20 @@ END get_room_property;
 
 -- Check for room vacancies and dynamically set the status of house
 CREATE OR REPLACE FUNCTION prop_vacancy_query(
-    p_property_id       properties.property_id%TYPE
+    p_property_id       rooms.property_id%TYPE
 )
   RETURN NUMBER
-IS
+IS 
   v_prop_rooms NUMBER;
-  pragma autonomous_transaction;
 BEGIN
-  SELECT COUNT(room_status) 
+  SELECT COUNT(rooms.room_status) 
     INTO v_prop_rooms
-    FROM rooms 
-         JOIN properties ON
+    FROM properties 
+         JOIN rooms ON
          properties.property_id = rooms.property_id
-   WHERE room_status = 'VACANT'
-   AND properties.property_id = p_property_id;
+   WHERE rooms.room_status = 'VACANT'
+   AND rooms.property_id = p_property_id;
   RETURN v_prop_rooms;
-  COMMIT;
 END prop_vacancy_query;
 
 -- SENDS A MESSAGE TO A USER UPON AN ACTION
@@ -814,24 +822,27 @@ CREATE OR REPLACE PROCEDURE send_message(
 	user_name    STRING(50);
     user_last    STRING(50);
 BEGIN
-	IF to_user IS NOT NULL THEN
-	    -- Get the users name for the admin response
-		SELECT user_forename, user_surname
-		INTO   user_name, user_last
-		FROM   users
-		WHERE  user_id = to_user;
-	END IF;
-
     -- Send the message to the user
     IF to_user IS NOT NULL THEN
 		INSERT INTO messages 
 		VALUES('', to_user, from_user, msg_type, this_message, '', '', request_id);
 	END IF;
 
-    -- Send a message to the admin
+    -- Prompt the admin that a user made a request
 	IF request_id IS NOT NULL AND made_request = 1 THEN
+
+		-- Get the given users name
+		SELECT user_forename, user_surname 
+		INTO   user_name, user_last
+		FROM   users 
+		JOIN   requests
+		ON     requests.user_id = users.user_id
+		WHERE  requests_id = request_id;  
+
+		-- Insert to the messages table
 		INSERT INTO messages 
 		VALUES('', '', '', msg_type, user_name || ' ' || user_last || ' has just made a maintenance request.', '', '', request_id);
+	
 	END IF;
 
 	-- Send a message to the admin noting that a payment has been made
