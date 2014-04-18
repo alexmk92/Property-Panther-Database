@@ -151,21 +151,6 @@ BEFORE INSERT OR UPDATE ON rooms FOR EACH ROW
 	:NEW.room_price   := TRIM(:NEW.room_price);
 END;
 
-CREATE OR REPLACE TRIGGER trg_rooms_after
-AFTER UPDATE ON rooms
-BEGIN
-	-- Update the table based on the result
-	IF prop_vacancy_query(:NEW.property_id) = 0 THEN
-		UPDATE properties
-		SET prop_status = 'VACANT'
-		WHERE properties.property_id = :NEW.property_id;
-	ELSE
-		UPDATE properties
-		SET prop_status = 'FULL'
-		WHERE properties.property_id = :NEW.property_id;
-	END IF;
-END;
-
 
 /*******************************************
 *                USERS TABLE               *
@@ -313,9 +298,6 @@ AFTER INSERT OR UPDATE ON users FOR EACH ROW
 			SET rooms.room_status = 'OCCUPIED'
 			WHERE rooms.room_id = :NEW.user_prop_room;
 
-			-- Set the users property equal to the room they have rented
-			-- UPDATE users SET user_property = get_room_property(:NEW.user_prop_room);
-
 			-- Check if any rooms are left in property and update if necessary
 			IF prop_vacancy_query(:NEW.user_property) = 0 THEN
 				UPDATE properties
@@ -347,9 +329,6 @@ AFTER INSERT OR UPDATE ON users FOR EACH ROW
 				SET prop_status = 'VACANT'
 				WHERE properties.property_id = :NEW.user_property;
 			END IF;
-
-			-- The user no longer lives here, set to NULL.
-			-- UPDATE users SET users.user_property = NULL WHERE users.user_id = :NEW.user_id;
 		END IF;
 	END IF;
 END;
@@ -397,7 +376,6 @@ BEFORE INSERT OR UPDATE ON notes FOR EACH ROW
 
 	/* Provide any formatting */
 	:NEW.note_body := TRIM(:NEW.note_body);
-
 END;
 
 /*******************************************
@@ -758,50 +736,6 @@ END;
 /*******************************************
 *                FUNCTIONS                 *
 ********************************************/
-CREATE OR REPLACE FUNCTION get_user_property( this_user NUMBER ) 
-	RETURN VARCHAR2 
-	AS curr_property properties.prop_track_code%TYPE;
-BEGIN
-	SELECT prop_track_code
-	INTO curr_property
-	FROM users
-	JOIN properties ON users.user_property = properties.property_id
-	WHERE users.user_id = this_user;
-
-	RETURN UPPER(curr_property);
-END get_user_property;
-
--- Get the property that the room belongs too
-CREATE OR REPLACE FUNCTION get_room_property( this_room NUMBER )
-	RETURN NUMBER
-	AS curr_property properties.property_id%TYPE;
-BEGIN
-	SELECT rooms.property_id
-	INTO curr_property
-	FROM rooms
-	WHERE rooms.room_id = this_room;
-
-	RETURN curr_property;
-END get_room_property;
-
--- Check for room vacancies and dynamically set the status of house
-CREATE OR REPLACE FUNCTION prop_vacancy_query(
-    p_property_id       rooms.property_id%TYPE
-)
-  RETURN NUMBER
-IS 
-  v_prop_rooms NUMBER;
-BEGIN
-  SELECT COUNT(rooms.room_status) 
-    INTO v_prop_rooms
-    FROM properties 
-         JOIN rooms ON
-         properties.property_id = rooms.property_id
-   WHERE rooms.room_status = 'VACANT'
-   AND rooms.property_id = p_property_id;
-  RETURN v_prop_rooms;
-END prop_vacancy_query;
-
 -- SENDS A MESSAGE TO A USER UPON AN ACTION
 -- @param - the user who sent the message
 -- @param - the user who receives the message
@@ -922,3 +856,31 @@ BEGIN
 	-- Return the concatenated name
 	RETURN this_forename || ' ' || this_surname;
 END getName;
+
+
+/**
+--
+-- NOTE : Due to a lack in time, these functions have been deprecated
+--        prop_vacancy_query() used to run on an autonomous transaction but this
+--        caused occasional locks on the db, to rectify this I would need to create
+--        a row level package, currently the query tries to read the rooms table
+--        mid-transaction and oracle will not allow this.
+--
+*/
+-- Check for room vacancies and dynamically set the status of house
+CREATE OR REPLACE FUNCTION prop_vacancy_query(
+    p_property_id       rooms.property_id%TYPE
+)
+  RETURN NUMBER
+IS 
+  v_prop_rooms NUMBER;
+BEGIN
+  SELECT COUNT(rooms.room_status) 
+    INTO v_prop_rooms
+    FROM properties 
+         JOIN rooms ON
+         properties.property_id = rooms.property_id
+   WHERE rooms.room_status = 'VACANT'
+   AND rooms.property_id = p_property_id;
+  RETURN v_prop_rooms;
+END prop_vacancy_query;
