@@ -524,7 +524,7 @@ CREATE TABLE payments
 							NOT NULL
 );
 
-CREATE SEQUENCE seq_payment_id START WITH 1 INCREMENT BY 1;
+CREATE SEQUENCE seq_payment_id   START WITH 1 INCREMENT BY 1;
 
 CREATE OR REPLACE TRIGGER trg_payments
 BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
@@ -616,6 +616,7 @@ BEGIN
 		END IF;
 	END IF;
 END;
+
 
 /*******************************************
 *        MAINTENANCE REQUEST TABLE         *
@@ -800,23 +801,13 @@ IS
     date_booked     DATE;
     date_overdue    DATE;
 BEGIN 
-	-- Get the payment due date
-	IF this_user IS NULL THEN 
-		SELECT payments.payment_due
-		INTO   date_overdue
-		FROM   payments
-		WHERE  payments.payment_status = 'OVERDUE' 
-		AND    payments.user_id = this_user
-		       FETCH FIRST ROW ONLY;
-	END IF;
-
 	-- Payment types
 	IF status = 'PAID' THEN
 		this_message := 'Hello, ' || getName(this_user) || ' just a short message to notify you that we received your payment on time - thank-you!.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'PAID LATE' THEN
 		this_message := 'Hello, ' || getName(this_user) || ' we have noticed that you paid your rent late this month, please ensure this does not become a habbit as we may have to start charging interest on late payments in future.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'OVERDUE' THEN
-		this_message := 'Hello, ' || getName(this_user) || ' it has come to our attention that you have an outstanding payment from: ' || date_overdue || ', this needs to be paid within the next 7 working days or you risk incurring a fee of up to £500.00.\n\nRegards,\nThe Property Panther team.';
+		this_message := 'Hello, ' || getName(this_user) || ' it has come to our attention that you have an outstanding payment, this needs to be paid within the next 7 working days or you risk incurring a fee of up to £500.00.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'PENDING' THEN
 		this_message := 'Hello, ' || getName(this_user) || ' your contract is still rolling, here is a friendly message to notify you that you must pay this month!\n\nRegards,\nThe Property Panther team.';
 
@@ -869,7 +860,7 @@ END getName;
 */
 -- Check for room vacancies and dynamically set the status of house
 CREATE OR REPLACE FUNCTION prop_vacancy_query(
-    p_property_id       rooms.property_id%TYPE
+    p_property_id       users.user_property%TYPE
 )
   RETURN NUMBER
 IS 
