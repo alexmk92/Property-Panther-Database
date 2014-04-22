@@ -79,11 +79,10 @@ BEFORE INSERT OR UPDATE ON properties FOR EACH ROW
 			INTO :NEW.prop_track_code
 			FROM sys.dual;
 		END IF;
-	END IF;
-
-	-- Set the date
-	IF :NEW.date_added IS NULL THEN
-		:NEW.date_added := SYSDATE;
+		-- Set the date
+		IF :NEW.date_added IS NULL THEN
+			:NEW.date_added := SYSDATE;
+		END IF;
 	END IF;
 
 	-- Perform any formatting
@@ -175,9 +174,7 @@ CREATE TABLE users
 	addr_line_1			VARCHAR2(100)
 						CONSTRAINT user_addr_ln_1_chk
 							CHECK(REGEXP_LIKE(addr_line_1,
-								'[A-Za-z0-9]'))
-						CONSTRAINT user_addr_ln_1_nn
-							NOT NULL,
+								'[A-Za-z0-9]')),
 	addr_line_2			VARCHAR2(100)
 						CONSTRAINT user_addr_ln_2_chk
 							CHECK(REGEXP_LIKE(addr_line_2,
@@ -186,26 +183,24 @@ CREATE TABLE users
 						CONSTRAINT user_addr_post_chk
 							CHECK(REGEXP_LIKE(addr_postcode,
 								'(([A-PR-UW-Z]{1}[A-IK-Y]?)([0-9]?[A-HJKS-UW]?[ABEHMNPRVWXY]?|[0-9]?[0-9]?))\s?([0-9]{1}[ABD-HJLNP-UW-Z]{2})'
-							))
-						CONSTRAINT user_addr_post_nn
-							NOT NULL,
+							)),
 	city_name			VARCHAR2(100)
 						CONSTRAINT city_name_chk
 							CHECK(REGEXP_LIKE(city_name,
-								'[A-Za-z]{1,100}'))
-						CONSTRAINT city_name_nn
-							NOT NULL,
-	user_title			VARCHAR2 (12)
-					  	CONSTRAINT title_name_nn 
-							NOT NULL,
-	user_forename		VARCHAR2(50) DEFAULT 'NULL'
+								'[A-Za-z]{1,100}')),
+	user_title			VARCHAR2 (12),
+	user_forename		VARCHAR2(50)
 						CONSTRAINT users_user_forename_chk
 							CHECK(REGEXP_LIKE(user_forename,
-								'[A-Za-z-]{1,50}')),
-	user_surname		VARCHAR2(50) DEFAULT 'NULL'
+								'[A-Za-z-]{1,50}'))
+						CONSTRAINT users_user_forename_nn
+							NOT NULL,
+	user_surname		VARCHAR2(50)
 						CONSTRAINT users_user_surname_chk
 							CHECK(REGEXP_LIKE(user_surname,
-								'[A-Za-z-]{1,50}')),
+								'[A-Za-z-]{1,50}'))
+						CONSTRAINT users_user_surname_nn
+							NOT NULL,
 	user_phone			VARCHAR2(14) 
 						CONSTRAINT users_user_phone_chk
 							CHECK(REGEXP_LIKE(user_phone,
@@ -297,37 +292,13 @@ AFTER INSERT OR UPDATE ON users FOR EACH ROW
 			UPDATE rooms
 			SET rooms.room_status = 'OCCUPIED'
 			WHERE rooms.room_id = :NEW.user_prop_room;
-
-			-- Check if any rooms are left in property and update if necessary
-			IF prop_vacancy_query(:NEW.user_property) = 0 THEN
-				UPDATE properties
-				SET prop_status = 'FULL'
-				WHERE properties.property_id = :NEW.user_property;
-			ELSE
-				UPDATE properties
-				SET prop_status = 'VACANT'
-				WHERE properties.property_id = :NEW.user_property;
-			END IF;
-
 		-- If Null, the user has moved out, set vacancy accordingly
 		ELSIF :NEW.user_prop_room IS NULL THEN
-			
 			-- Check they lived at a property before, else do nothing
 			IF :OLD.user_prop_room IS NOT NULL THEN 
 				UPDATE rooms
 				SET rooms.room_status = 'VACANT'
 				WHERE rooms.room_id = :OLD.user_prop_room;
-			END IF;
-
-			-- Check whether the property is vacant and update accordingly
-			IF prop_vacancy_query(:NEW.user_property) = 0 THEN
-				UPDATE properties
-				SET prop_status = 'FULL'
-				WHERE properties.property_id = :NEW.user_property;
-			ELSE
-				UPDATE properties
-				SET prop_status = 'VACANT'
-				WHERE properties.property_id = :NEW.user_property;
 			END IF;
 		END IF;
 	END IF;
@@ -805,11 +776,11 @@ BEGIN
 	IF status = 'PAID' THEN
 		this_message := 'Hello, ' || getName(this_user) || ' just a short message to notify you that we received your payment on time - thank-you!.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'PAID LATE' THEN
-		this_message := 'Hello, ' || getName(this_user) || ' we have noticed that you paid your rent late this month, please ensure this does not become a habbit as we may have to start charging interest on late payments in future.\n\nRegards,\nThe Property Panther team.';
+		this_message := 'Hello, ' || getName(this_user) || ' we have noticed that you paid your rent late this month, please ensure this does not become a habit as we may have to start charging interest on late payments in future.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'OVERDUE' THEN
 		this_message := 'Hello, ' || getName(this_user) || ' it has come to our attention that you have an outstanding payment, this needs to be paid within the next 7 working days or you risk incurring a fee of up to £500.00.\n\nRegards,\nThe Property Panther team.';
 	ELSIF status = 'PENDING' THEN
-		this_message := 'Hello, ' || getName(this_user) || ' your contract is still rolling, here is a friendly message to notify you that you must pay this month!\n\nRegards,\nThe Property Panther team.';
+		this_message := 'Hello, ' || getName(this_user) || ' Thanks for your recent payment. You can also pay your rent in advance if you wish from your dashboard.\n\nRegards,\nThe Property Panther team.';
 
 	-- Maintenance request types
 	ELSIF status = 'RECEIVED' THEN
@@ -829,7 +800,6 @@ END;
 
 -- RETURNS THE NAME OF A USER
 -- @param  - the users id, whose name we want to get
--- @pragma - uses an autonomous transaction to allow updating independent of the master transaction.
 CREATE OR REPLACE FUNCTION getName(
 	this_user		users.user_id%TYPE
 )
@@ -848,30 +818,3 @@ BEGIN
 	RETURN this_forename || ' ' || this_surname;
 END getName;
 
-
-/**
---
--- NOTE : Due to a lack in time, these functions have been deprecated
---        prop_vacancy_query() used to run on an autonomous transaction but this
---        caused occasional locks on the db, to rectify this I would need to create
---        a row level package, currently the query tries to read the rooms table
---        mid-transaction and oracle will not allow this.
---
-*/
--- Check for room vacancies and dynamically set the status of house
-CREATE OR REPLACE FUNCTION prop_vacancy_query(
-    p_property_id       users.user_property%TYPE
-)
-  RETURN NUMBER
-IS 
-  v_prop_rooms NUMBER;
-BEGIN
-  SELECT COUNT(rooms.room_status) 
-    INTO v_prop_rooms
-    FROM properties 
-         JOIN rooms ON
-         properties.property_id = rooms.property_id
-   WHERE rooms.room_status = 'VACANT'
-   AND rooms.property_id = p_property_id;
-  RETURN v_prop_rooms;
-END prop_vacancy_query;
