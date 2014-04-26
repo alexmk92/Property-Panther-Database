@@ -737,17 +737,9 @@ BEGIN
     -- Prompt the admin that a user made a request
 	IF request_id IS NOT NULL AND made_request = 1 THEN
 
-		-- Get the given users name
-		SELECT user_forename, user_surname 
-		INTO   user_name, user_last
-		FROM   users 
-		JOIN   requests
-		ON     requests.user_id = users.user_id
-		WHERE  requests_id = request_id;  
-
 		-- Insert to the messages table
 		INSERT INTO messages 
-		VALUES('', '', '', msg_type, user_name || ' ' || user_last || ' has just made a maintenance request.', '', '', request_id);
+		VALUES('', '', '', msg_type, getName(to_user) || ' has just made a maintenance request.', '', '', request_id);
 	
 	END IF;
 
