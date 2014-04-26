@@ -110,7 +110,7 @@ CREATE TABLE rooms
 							NOT NULL,
 	property_id     	NUMBER(11)
 						CONSTRAINT rooms_property_id_fk
-							REFERENCES properties(property_id)
+							REFERENCES properties(property_id) ON DELETE SET NULL
 						CONSTRAINT rooms_property_id_nn
 							NOT NULL,
 	room_price			VARCHAR2(12) DEFAULT '0.00'
@@ -217,10 +217,10 @@ CREATE TABLE users
 							),
 	user_property		NUMBER(11) DEFAULT NULL
 						CONSTRAINT users_user_house_fk
-							REFERENCES properties(property_id),
+							REFERENCES properties(property_id) ON DELETE SET NULL,
 	user_prop_room		NUMBER(11) DEFAULT NULL
 						CONSTRAINT users_user_room_fk
-							REFERENCES rooms(room_id),
+							REFERENCES rooms(room_id) ON DELETE SET NULL,
 	session_key         VARCHAR(40)
 );
 
@@ -281,7 +281,7 @@ AFTER INSERT OR UPDATE ON users FOR EACH ROW
 	  	-- Alert a user that they need to change their password
 		IF :NEW.pass_changed = 0 THEN
 			send_message(:NEW.user_id, null, 'ALERT','Hello, ' || :NEW.user_forename || ' ' || :NEW.user_surname || 
-				         ', and thank-you for register with property panther!  Please login with the username: ' || 
+				         ', and thank-you for registering with property panther!  Please login with the username: ' || 
 				         :NEW.user_email || ' and the password: ' || :NEW.user_pass || ', it is important you change this temporary password for security reasons!', null, 0);
 		END IF;
 	END IF;
@@ -318,9 +318,7 @@ CREATE TABLE notes
 							NOT NULL,
 	user_id 			NUMBER(11)
 						CONSTRAINT notes_user_id_fk
-							REFERENCES users(user_id)
-						CONSTRAINT notes_user_id_nn
-							NOT NULL,
+							REFERENCES users(user_id) ON DELETE CASCADE,
 	note_body			VARCHAR2(250)
 						CONSTRAINT notes_note_body_nn
 							NOT NULL,
@@ -361,10 +359,10 @@ CREATE TABLE messages
 							NOT NULL,
 	message_to 			NUMBER(11)
 						CONSTRAINT inbox_message_to_fk
-							REFERENCES users(user_id),
+							REFERENCES users(user_id) ON DELETE CASCADE,
 	message_from 		NUMBER(11)
 						CONSTRAINT inbox_message_from_fk
-							REFERENCES users(user_id),
+							REFERENCES users(user_id) ON DELETE CASCADE,
 	message_type		VARCHAR2(150) DEFAULT 'INBOX'
 						CONSTRAINT inbox_message_type_chk
 							CHECK
@@ -381,7 +379,7 @@ CREATE TABLE messages
 	message_sent		DATE,
 	message_read		NUMBER(1) DEFAULT 0,
 	request_id          CONSTRAINT inbox_request_id_fk
-							REFERENCES requests(request_id)
+							REFERENCES requests(request_id) ON DELETE SET NULL
 );
 
 CREATE SEQUENCE seq_inbox_id START WITH 1 INCREMENT BY 1;
@@ -464,9 +462,7 @@ CREATE TABLE payments
 							NOT NULL,
 	user_id				NUMBER(11)
 						CONSTRAINT payments_user_id_fk
-							REFERENCES users(user_id)
-						CONSTRAINT payments_user_id_nn
-							NOT NULL,
+							REFERENCES users(user_id) ON DELETE SET NULL,
 	reference_id 		VARCHAR2(12)
 						CONSTRAINT payments_ref_id_nn
 							NOT NULL,
@@ -503,6 +499,9 @@ BEFORE INSERT OR UPDATE ON payments FOR EACH ROW
 	/* If the default fails then set status to RECEIVED */
 	IF :NEW.payment_status IS NULL THEN
 		:NEW.payment_status := 'PENDING';
+	END IF;
+	IF :NEW.payment_due IS NULL THEN
+		:NEW.payment_due := SYSDATE;
 	END IF;
 
 	IF INSERTING THEN
@@ -575,16 +574,18 @@ BEGIN
 		-------------------------------------------------------------------
 		-- Msg 1 - Targets the user who paid, message will show from system
 		-- Msg 2 - Targets an admin only, message will show from system
-		IF :NEW.payment_status = 'PAID' THEN 		
-	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID'), NULL, 0);                                          
-	       send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' has just made a payment of £' || :NEW.payment_amount || '.', NULL, 0);  
-	    ELSIF :NEW.payment_status = 'PAID LATE' THEN 
-	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID LATE'), NULL, 0);
-	       send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' has just made a late payment of £' || :NEW.payment_amount || '.', NULL, 0);
-	    ELSIF :NEW.payment_status = 'OVERDUE' THEN 
-	       send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'OVERDUE'), NULL, 0);
-	       send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' has an outstanding payment of £' || :NEW.payment_amount || ', this needs to be addressed.', NULL, 0);
-		END IF;
+	    IF :NEW.user_id IS NOT NULL THEN 
+	      IF :NEW.payment_status = 'PAID' THEN 		
+	           send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID'), NULL, 0);                                          
+	           send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' has just made a payment of £' || :NEW.payment_amount || '.', NULL, 0);  
+	        ELSIF :NEW.payment_status = 'PAID LATE' THEN 
+	           send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'PAID LATE'), NULL, 0);
+	           send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' has just made a late payment of £' || :NEW.payment_amount || '.', NULL, 0);
+	        ELSIF :NEW.payment_status = 'OVERDUE' THEN 
+	           send_message(:NEW.user_id, NULL, 'ALERT', getMessage(:NEW.user_id, 'OVERDUE'), NULL, 0);
+	           send_message(NULL, NULL, 'ALERT', getName(:NEW.user_id) || ' has an outstanding payment of £' || :NEW.payment_amount || ', this needs to be addressed.', NULL, 0);
+	      END IF;
+	    END IF;
 	END IF;
 END;
 
@@ -604,9 +605,7 @@ CREATE TABLE requests
 							NOT NULL,
 	user_id 			NUMBER(11)
 						CONSTRAINT requests_user_id_fk
-							REFERENCES users(user_id)
-						CONSTRAINT requests_user_id_nn
-							NOT NULL,
+							REFERENCES users(user_id) ON DELETE CASCADE,
 	request_details		VARCHAR2(1500) 
 						CONSTRAINT request_details_nn
 							NOT NULL,
@@ -687,20 +686,22 @@ END;
 CREATE OR REPLACE TRIGGER trg_requests_after
 AFTER INSERT OR UPDATE ON requests FOR EACH ROW
 BEGIN
-	IF :NEW.request_status = 'RECEIVED' THEN 
-	    send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'RECEIVED'), :NEW.requests_id, 1);
-	END IF;
+	IF :NEW.user_id IS NOT NULL THEN
+		IF :NEW.request_status = 'RECEIVED' THEN 
+		    send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'RECEIVED'), :NEW.requests_id, 1);
+		END IF;
 
-	IF UPDATING THEN
+		IF UPDATING THEN
 			-- Send a message
-		IF :NEW.request_status = 'SEEN' THEN 
-	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SEEN'), :NEW.requests_id, 0);
-	    ELSIF :NEW.request_status = 'SCHEDULED' THEN 
-	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SCHEDULED'), :NEW.requests_id, 0);
-	    ELSIF :NEW.request_status = 'IN PROGRESS' THEN 
-	       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'IN PROGRESS'), :NEW.requests_id, 0);
-	    ELSIF :NEW.request_status = 'COMPLETED' THEN
-	    	send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'COMPLETED'), :NEW.requests_id, 0);
+			IF :NEW.request_status = 'SEEN' THEN 
+		       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SEEN'), :NEW.requests_id, 0);
+		    ELSIF :NEW.request_status = 'SCHEDULED' THEN 
+		       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'SCHEDULED'), :NEW.requests_id, 0);
+		    ELSIF :NEW.request_status = 'IN PROGRESS' THEN 
+		       send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'IN PROGRESS'), :NEW.requests_id, 0);
+		    ELSIF :NEW.request_status = 'COMPLETED' THEN
+		    	send_message(:NEW.user_id, NULL, 'MAINTENANCE', getMessage(:NEW.user_id, 'COMPLETED'), :NEW.requests_id, 0);
+			END IF;
 		END IF;
 	END IF;
 END;
@@ -744,9 +745,9 @@ BEGIN
 	END IF;
 
 	-- Send a message to the admin noting that a payment has been made
-	IF to_user IS NULL AND from_user IS NULL THEN
-		INSERT INTO messages 
-		VALUES('', '', '', msg_type, this_message, '', '', request_id);
+	IF to_user IS NULL AND from_user IS NULL AND this_message IS NOT NULL THEN
+	    INSERT INTO messages 
+	    VALUES('', '', '', msg_type, this_message, '', '', request_id);
 	END IF;
 END send_message;
 
@@ -764,31 +765,34 @@ IS
     date_booked     DATE;
     date_overdue    DATE;
 BEGIN 
-	-- Payment types
-	IF status = 'PAID' THEN
-		this_message := 'Hello, ' || getName(this_user) || ' just a short message to notify you that we received your payment on time - thank-you!.\n\nRegards,\nThe Property Panther team.';
-	ELSIF status = 'PAID LATE' THEN
-		this_message := 'Hello, ' || getName(this_user) || ' we have noticed that you paid your rent late this month, please ensure this does not become a habit as we may have to start charging interest on late payments in future.\n\nRegards,\nThe Property Panther team.';
-	ELSIF status = 'OVERDUE' THEN
-		this_message := 'Hello, ' || getName(this_user) || ' it has come to our attention that you have an outstanding payment, this needs to be paid within the next 7 working days or you risk incurring a fee of up to £500.00.\n\nRegards,\nThe Property Panther team.';
-	ELSIF status = 'PENDING' THEN
-		this_message := 'Hello, ' || getName(this_user) || ' Thanks for your recent payment. You can also pay your rent in advance if you wish from your dashboard.\n\nRegards,\nThe Property Panther team.';
-
-	-- Maintenance request types
-	ELSIF status = 'RECEIVED' THEN
-		this_message := 'Hello, ' || getName(this_user) || ' your maintenance request has been received as of ' || SYSDATE || ', please continue to watch this space as we process your request.\nCurrent Status: RECEIVED.\n\nRegards,\nThe Property Panther team.';
-	ELSIF status = 'SEEN' THEN 
-		this_message := 'Hello, ' || getName(this_user) || ' one of our agents has just viewed you request, we are now in the process of booking a time slot for you, you shall be notified on this update.\nCurrent Status: SEEN.\n\nRegards,\nThe Property Panther team.';
-	ELSIF status = 'SCHEDULED' THEN 
-		this_message := 'Hello, ' || getName(this_user) || ' we have scheduled your request for: ' || SYSDATE || ' if this is of any inconvenience please contact us immediately, any updates shall be forwarded to you.\nCurrent Status: SCHEDULED.\n\nRegards,\nThe Property Panther team.';
-	ELSIF status = 'IN PROGRESS' THEN
-		this_message := 'Hello, ' || getName(this_user) || ' an enginner has been sent out to your property to complete the outstanding task, we hope this resolves your problem.\nCurrent Status: IN PROGRESS.\n\nRegards,\nThe Property Panther team.';
-	ELSIF status = 'COMPLETED' THEN
-		this_message := 'Hello, ' || getName(this_user) || ' your request has been successfully completed today (' || SYSDATE || '), thank-you for your patience and co-operation.\nCurrent Status: COMPLETED.\n\nRegards,\nThe Property Panther team.';
-	END IF;
+  IF this_user IS NOT NULL THEN 
+    -- Payment types
+    IF status = 'PAID' THEN
+      this_message := 'Hello, ' || getName(this_user) || ' just a short message to notify you that we received your payment on time - thank-you!.\n\nRegards,\nThe Property Panther team.';
+    ELSIF status = 'PAID LATE' THEN
+      this_message := 'Hello, ' || getName(this_user) || ' we have noticed that you paid your rent late this month, please ensure this does not become a habit as we may have to start charging interest on late payments in future.\n\nRegards,\nThe Property Panther team.';
+    ELSIF status = 'OVERDUE' THEN
+      this_message := 'Hello, ' || getName(this_user) || ' it has come to our attention that you have an outstanding payment, this needs to be paid within the next 7 working days or you risk incurring a fee of up to £500.00.\n\nRegards,\nThe Property Panther team.';
+    ELSIF status = 'PENDING' THEN
+      this_message := 'Hello, ' || getName(this_user) || ' you have a new payment outstanding on your property. You can also pay your rent in advance if you wish from your dashboard.\n\nRegards,\nThe Property Panther team.';
+  
+    -- Maintenance request types
+    ELSIF status = 'RECEIVED' THEN
+      this_message := 'Hello, ' || getName(this_user) || ' your maintenance request has been received as of ' || SYSDATE || ', please continue to watch this space as we process your request.\nCurrent Status: RECEIVED.\n\nRegards,\nThe Property Panther team.';
+    ELSIF status = 'SEEN' THEN 
+      this_message := 'Hello, ' || getName(this_user) || ' one of our agents has just viewed you request, we are now in the process of booking a time slot for you, you shall be notified on this update.\nCurrent Status: SEEN.\n\nRegards,\nThe Property Panther team.';
+    ELSIF status = 'SCHEDULED' THEN 
+      this_message := 'Hello, ' || getName(this_user) || ' we have scheduled your request for: ' || SYSDATE || ' if this is of any inconvenience please contact us immediately, any updates shall be forwarded to you.\nCurrent Status: SCHEDULED.\n\nRegards,\nThe Property Panther team.';
+    ELSIF status = 'IN PROGRESS' THEN
+      this_message := 'Hello, ' || getName(this_user) || ' an enginner has been sent out to your property to complete the outstanding task, we hope this resolves your problem.\nCurrent Status: IN PROGRESS.\n\nRegards,\nThe Property Panther team.';
+    ELSIF status = 'COMPLETED' THEN
+      this_message := 'Hello, ' || getName(this_user) || ' your request has been successfully completed today (' || SYSDATE || '), thank-you for your patience and co-operation.\nCurrent Status: COMPLETED.\n\nRegards,\nThe Property Panther team.';
+    END IF;
+  END IF;
 
 	RETURN this_message;
 END;
+
 
 -- RETURNS THE NAME OF A USER
 -- @param  - the users id, whose name we want to get
@@ -800,11 +804,13 @@ IS
 	this_forename	STRING(50);
 	this_surname 	STRING(50);
 BEGIN
-	-- Populate the name variables
-	SELECT user_forename, user_surname
-	INTO   this_forename, this_surname
-	FROM   users 
-	WHERE  user_id = this_user;
+	IF this_user IS NOT NULL THEN 
+		-- Populate the name variables
+		SELECT user_forename, user_surname
+		INTO   this_forename, this_surname
+		FROM   users 
+		WHERE  user_id = this_user;
+	END IF;
 
 	-- Return the concatenated name
 	RETURN this_forename || ' ' || this_surname;
